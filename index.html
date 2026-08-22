@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>LaneGuard — behavioral anti-cheat demo</title>
+<style>
+  :root {
+    --bg: #0b0e13;
+    --panel: #12161f;
+    --border: #232a38;
+    --text: #d7dde8;
+    --muted: #8792a6;
+    --accent: #4da3ff;
+    --ok: #3ecf8e;
+    --warn: #f5b942;
+    --bad: #f4544c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  header { text-align: center; margin-bottom: 12px; }
+  header h1 { font-size: 18px; letter-spacing: 2px; }
+  header p { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .wrap { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+  canvas {
+    background: #10141c;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    touch-action: none;
+    display: block;
+  }
+  .panel {
+    width: 360px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 12px;
+  }
+  .panel h2 { font-size: 13px; letter-spacing: 1px; margin-bottom: 10px; color: var(--accent); }
+  .verdict {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;
+    border: 1px solid var(--border); background: #0d1118;
+  }
+  .verdict .badge {
+    font-weight: bold; font-size: 14px; letter-spacing: 2px;
+    padding: 4px 10px; border-radius: 4px;
+  }
+  .badge.human { background: rgba(62,207,142,.15); color: var(--ok); }
+  .badge.suspect { background: rgba(245,185,66,.15); color: var(--warn); }
+  .badge.bot { background: rgba(244,84,76,.18); color: var(--bad); }
+  .badge.na { background: rgba(135,146,166,.12); color: var(--muted); }
+  .signal { margin-bottom: 10px; }
+  .signal .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+  .signal .name { color: var(--text); }
+  .signal .val { color: var(--muted); }
+  .bar { height: 6px; background: #1a2030; border-radius: 3px; overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: 3px; background: var(--ok); transition: width .3s, background .3s; }
+  .detail { color: var(--muted); font-size: 11px; margin-top: 2px; min-height: 13px; }
+  .flags { margin-top: 12px; }
+  .flags div { color: var(--bad); font-size: 11px; margin-bottom: 3px; }
+  .stats { margin-top: 12px; color: var(--muted); line-height: 1.7; border-top: 1px solid var(--border); padding-top: 8px; }
+  .controls { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  button {
+    background: #1a2233; color: var(--text); border: 1px solid var(--border);
+    padding: 7px 12px; border-radius: 5px; cursor: pointer; font: inherit; font-size: 12px;
+  }
+  button:hover { border-color: var(--accent); }
+  button.active { border-color: var(--accent); color: var(--accent); }
+  label.toggle { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; margin-top: 10px; cursor: pointer; }
+  footer { margin-top: 14px; color: var(--muted); font-size: 11px; max-width: 800px; text-align: center; line-height: 1.6; }
+</style>
+</head>
+<body>
+<header>
+  <h1>LANEGUARD</h1>
+  <p>original driving-game simulation + behavioral anti-cheat &mdash; play it, then let the bots try</p>
+</header>
+
+<div class="wrap">
+  <canvas id="game" width="420" height="640"></canvas>
+
+  <div class="panel">
+    <h2>ANTI-CHEAT VERDICT</h2>
+    <div class="verdict">
+      <span>session assessment</span>
+      <span class="badge na" id="badge">WARMING UP</span>
+    </div>
+    <div id="signals"></div>
+    <div class="flags" id="flags"></div>
+    <div class="stats" id="stats"></div>
+    <div class="controls">
+      <button id="btnHuman" class="active">Play (human)</button>
+      <button id="btnPerfect">Perfect bot</button>
+      <button id="btnMirror">Human-mirroring bot</button>
+      <button id="btnReset">Reset telemetry</button>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="hwInject">
+      simulate hardware-level injection (events arrive trusted, like a phone-farm rig)
+    </label>
+  </div>
+</div>
+
+<footer>
+  Swipe / drag on the road or use &larr; &rarr; keys. Hold the green lane to cash out; a crash
+  forfeits the payout, which climbs to 2.5x with distance. The game is an original simulation
+  (no third-party code or assets). The two bot modes reproduce the real attack classes against
+  skill-money games: scripted perfect play, and replay of perturbed human swipe recordings.
+  The detector never sees which mode is running &mdash; it judges behavior only.
+</footer>
+
+<script>
+"use strict";
+
+/* ============================== RNG ============================== */
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function gauss(rand, mean, sd) {
+  const u = Math.max(rand(), 1e-9), v = rand();
+  return mean + sd * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+const rng = mulberry32(1337);
+
+/* ====================== WORLD / PROJECTION ======================
+   World space: lateral position in lane units (lane centers at 0,1,2,3;
+   lane 3 is the cash-out lane), depth z in road units ahead of the car.
+   Third-person camera: everything projects toward a horizon point. */
+const cv = document.getElementById("game");
+const ctx = cv.getContext("2d");
+const W = cv.width, H = cv.height;
+const LANES = 4;                 // 0..2 traffic, 3 = cash-out
+const CASH_LANE = 3;
+const HORIZON_Y = 150;
+const PLAYER_SCREEN_Y = 552;
+const LANE_PX = 82;              // lane width in px at the player plane
+const SPAWN_Z = 46;
+const SWIPE_THRESHOLD = 28;
+const THREAT_WINDOW = 1.15;      // s of time-to-impact at which a blocking car becomes a threat
+const PLAYER_HALF_W = 0.34;      // in lane units
+const ANGLED_HALF_W = 0.19;      // hitbox narrows while the car is angled mid-change
+const CAR_HALF_W = 0.36;
+const CAR_HALF_L = 1.3;          // z half-length
+const PLAYER_HALF_L = 1.3;
+const BARRIER_HALF_W = 0.06;
+const CASH_HOLD = 1.6;           // s in the cash-out lane to bank the run
+const ENTRY_FEE = 1.00;
+
+function proj(z) { return 1 / (1 + z * 0.11); }          // 1 at player plane -> ~0.16 at horizon
+function screenY(p) { return HORIZON_Y + (PLAYER_SCREEN_Y - HORIZON_Y) * ((p - 0.16) / 0.84); }
+function screenX(lat, p) { return W / 2 + (lat - 1.5) * LANE_PX * p; }
+
+/* ============================== GAME ============================== */
+const game = {
+  state: "idle",                 // idle | running | dead | cashed
+  lane: 1,                       // committed target lane
+  x: 1,                          // continuous lateral position (lane units)
+  cars: [],                      // {lane, z}  z = center depth, decreasing
+  barriers: [],                  // {boundary (0..2 = between b and b+1), z0, z1}
+  speed: 13,                     // z units / s
+  dist: 0,
+  score: 0,
+  deaths: 0,
+  lastOpen: 1,
+  waveGap: 26,
+  zSinceWave: 0,
+  scroll: 0,
+  stateAt: 0,
+  flash: 0,
+  cashTimer: 0,
+  banked: 0,
+};
+
+function multiplier() { return Math.min(2.5, 1 + game.score * 0.02); }
+
+function resetRun() {
+  game.cars = []; game.barriers = [];
+  game.lane = 1; game.x = 1;
+  game.lastOpen = 1;
+  game.speed = 13; game.waveGap = 26;
+  game.zSinceWave = game.waveGap;
+  game.dist = 0; game.score = 0;
+  game.cashTimer = 0;
+  game.state = "running";
+}
+
+function spawnWave() {
+  // The open traffic lane walks by at most one step, so a correct dodge is
+  // always reachable. Lane 3 (cash-out) gets its own occasional traffic.
+  const r = rng();
+  let open = game.lastOpen;
+  if (r < 0.36) open = Math.max(0, open - 1);
+  else if (r < 0.72) open = Math.min(2, open + 1);
+  const needCross = open !== game.lastOpen ? Math.min(open, game.lastOpen) : -1;
+  game.lastOpen = open;
+
+  for (let l = 0; l < 3; l++) {
+    if (l === open) continue;
+    if (l !== open && rng() < 0.82) game.cars.push({ lane: l, z: SPAWN_Z + (rng() - 0.5) * 3, threatAt: 0, rtLogged: false, passed: false });
+  }
+  if (rng() < 0.35) game.cars.push({ lane: CASH_LANE, z: SPAWN_Z + (rng() - 0.5) * 3, threatAt: 0, rtLogged: false, passed: false });
+
+  // Barrier trap: a stationary rail on a lane boundary, never on the boundary
+  // the guaranteed path needs to cross for this wave.
+  if (rng() < 0.34) {
+    const options = [0, 1, 2].filter(b => b !== needCross);
+    const b = options[(rng() * options.length) | 0];
+    const len = 5 + rng() * 4;
+    game.barriers.push({ boundary: b, z0: SPAWN_Z - game.waveGap * 0.55, z1: SPAWN_Z - game.waveGap * 0.55 + len });
+  }
+}
+
+function barrierBlocks(fromLane, toLane, zLead) {
+  const b = Math.min(fromLane, toLane);
+  for (const bar of game.barriers) {
+    if (bar.boundary !== b) continue;
+    if (bar.z1 > -PLAYER_HALF_L && bar.z0 < zLead) return true;
+  }
+  return false;
+}
+
+function laneChange(dir, swipe) {
+  if (game.state !== "running") return;
+  const from = game.lane;
+  const to = Math.max(0, Math.min(LANES - 1, from + dir));
+  if (to === from) return;
+  game.lane = to;
+  // Reaction time: nearest un-logged threat car that was in the lane we left.
+  let best = null;
+  for (const car of game.cars) {
+    if (car.passed || car.rtLogged || !car.threatAt) continue;
+    if (car.lane !== from) continue;
+    if (!best || car.z < best.z) best = car;
+  }
+  if (best) {
+    best.rtLogged = true;
+    const rt = performance.now() - best.threatAt;
+    AC.recordDodge(rt, best.z / game.speed);
+  }
+  if (swipe) AC.recordSwipe(swipe);
+}
+
+function crash() {
+  game.state = "dead";
+  game.stateAt = performance.now();
+  game.flash = 1;
+  game.deaths++;
+  AC.recordDeath();
+}
+
+let lastFrame = performance.now();
+function frame(now) {
+  const dt = Math.min((now - lastFrame) / 1000, 0.05);
+  lastFrame = now;
+
+  if (game.state === "running") {
+    const dz = game.speed * dt;
+    game.scroll = (game.scroll + dz) % 4;
+    game.dist += dz;
+    game.zSinceWave += dz;
+    if (game.zSinceWave >= game.waveGap) {
+      game.zSinceWave = 0;
+      spawnWave();
+    }
+
+    // lateral movement: car angles toward the target lane, hitbox narrows
+    const dxLane = game.lane - game.x;
+    const step = 6.2 * dt; // lanes/s
+    if (Math.abs(dxLane) <= step) game.x = game.lane;
+    else game.x += Math.sign(dxLane) * step;
+    const angled = Math.abs(game.lane - game.x) > 0.06;
+    const halfW = angled ? ANGLED_HALF_W : PLAYER_HALF_W;
+
+    for (const car of game.cars) {
+      car.z -= dz;
+      // threat registration against the committed lane
+      if (!car.passed && car.lane === game.lane && !car.threatAt) {
+        const tti = car.z / game.speed;
+        if (tti > 0 && tti < THREAT_WINDOW) car.threatAt = performance.now();
+      }
+      if (!car.passed && car.z < -PLAYER_HALF_L - CAR_HALF_L) {
+        car.passed = true;
+        game.score++;
+        AC.rowsPassed++;
+        game.speed = Math.min(26, game.speed + 0.28);
+        game.waveGap = Math.max(17, game.waveGap - 0.10);
+      }
+      // collision (continuous lateral position vs car box)
+      if (!car.passed && Math.abs(car.z) < PLAYER_HALF_L + CAR_HALF_L - 0.15 &&
+          Math.abs(car.lane - game.x) < halfW + CAR_HALF_W) {
+        crash();
+      }
+    }
+    for (const bar of game.barriers) {
+      bar.z0 -= dz; bar.z1 -= dz;
+      // slamming into a rail while straddling its boundary
+      const bx = bar.boundary + 0.5;
+      if (bar.z1 > -PLAYER_HALF_L && bar.z0 < PLAYER_HALF_L &&
+          Math.abs(bx - game.x) < halfW + BARRIER_HALF_W) {
+        crash();
+      }
+    }
+    game.cars = game.cars.filter(c => c.z > -8);
+    game.barriers = game.barriers.filter(b => b.z1 > -8);
+
+    // cash-out: hold the green lane
+    if (game.lane === CASH_LANE && Math.abs(game.x - CASH_LANE) < 0.1) {
+      game.cashTimer += dt;
+      if (game.cashTimer >= CASH_HOLD) {
+        game.banked = ENTRY_FEE * multiplier();
+        game.state = "cashed";
+        game.stateAt = now;
+      }
+    } else {
+      game.cashTimer = Math.max(0, game.cashTimer - dt * 2);
+    }
+  } else if (game.state === "dead" && now - game.stateAt > 950) {
+    resetRun();
+  } else if (game.state === "cashed" && now - game.stateAt > 1400) {
+    resetRun();
+  }
+
+  draw(now);
+  Bot.tick(now);
+  requestAnimationFrame(frame);
+}
+
+/* ============================== DRAW ============================== */
+function draw(now) {
+  ctx.clearRect(0, 0, W, H);
+  // sky
+  const sky = ctx.createLinearGradient(0, 0, 0, HORIZON_Y);
+  sky.addColorStop(0, "#0d1220"); sky.addColorStop(1, "#1b2438");
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, HORIZON_Y);
+  // ground
+  ctx.fillStyle = "#0e1119"; ctx.fillRect(0, HORIZON_Y, W, H - HORIZON_Y);
+
+  // road surface
+  roadPoly(-2.05, 2.05, "#161b26");
+  // cash-out lane tint
+  roadPoly(2.5 - 0.5 + 0.0, 2.05, "rgba(62,207,142,0.10)", 2.5);
+  roadPoly(2.5, 3.55, "rgba(62,207,142,0.10)");
+
+  // lane boundary dashes
+  for (const b of [0, 1, 2]) {
+    const lat = b + 0.5;
+    ctx.strokeStyle = b === 2 ? "rgba(62,207,142,0.5)" : "#2a3347";
+    ctx.lineWidth = 2;
+    for (let z = -(game.scroll % 4); z < SPAWN_Z; z += 4) {
+      const p1 = proj(Math.max(0, z)), p2 = proj(Math.max(0, z + 2.2));
+      if (z + 2.2 < 0) continue;
+      ctx.beginPath();
+      ctx.moveTo(screenX(lat, p1), screenY(p1));
+      ctx.lineTo(screenX(lat, p2), screenY(p2));
+      ctx.stroke();
+    }
+  }
+  // road edges
+  for (const lat of [-0.55, 3.55]) {
+    const p1 = proj(0), p2 = proj(SPAWN_Z);
+    ctx.strokeStyle = "#39435c"; ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(screenX(lat, p1), screenY(p1));
+    ctx.lineTo(screenX(lat, p2), screenY(p2));
+    ctx.stroke();
+  }
+
+  // draw far-to-near
+  const items = [];
+  for (const c of game.cars) if (c.z > -6 && c.z < SPAWN_Z) items.push({ z: c.z, t: "car", o: c });
+  for (const b of game.barriers) if (b.z1 > -6 && b.z0 < SPAWN_Z) items.push({ z: b.z1, t: "bar", o: b });
+  items.sort((a, b2) => b2.z - a.z);
+  for (const it of items) it.t === "car" ? drawCar(it.o) : drawBarrier(it.o);
+
+  drawPlayer();
+  drawHUD(now);
+}
+
+function roadPoly(latA, latB, fill, latBnear) {
+  const pN = proj(0), pF = proj(SPAWN_Z);
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.moveTo(screenX(latA, pN), screenY(pN));
+  ctx.lineTo(screenX(latA, pF), screenY(pF));
+  ctx.lineTo(screenX(latBnear !== undefined ? latBnear : latB, pF), screenY(pF));
+  ctx.lineTo(screenX(latB, pN), screenY(pN));
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawCar(c) {
+  const p = proj(Math.max(0, c.z));
+  const x = screenX(c.lane, p), y = screenY(p);
+  const w = CAR_HALF_W * 2 * LANE_PX * p, h = 66 * p;
+  ctx.fillStyle = "#5b6b8c";
+  ctx.beginPath(); ctx.roundRect(x - w / 2, y - h, w, h, 6 * p); ctx.fill();
+  ctx.fillStyle = "#3a465e";
+  ctx.fillRect(x - w / 2 + 4 * p, y - h * 0.78, w - 8 * p, h * 0.22);
+  ctx.fillStyle = "#242e42";
+  ctx.fillRect(x - w / 2 + 3 * p, y - h * 0.16, w - 6 * p, h * 0.12);
+  // taillights
+  ctx.fillStyle = "#c74b4b";
+  ctx.fillRect(x - w / 2 + 2 * p, y - 6 * p, 8 * p, 4 * p);
+  ctx.fillRect(x + w / 2 - 10 * p, y - 6 * p, 8 * p, 4 * p);
+}
+
+function drawBarrier(b) {
+  const lat = b.boundary + 0.5;
+  const z0 = Math.max(0, b.z0), z1 = Math.min(SPAWN_Z, b.z1);
+  if (z1 <= z0) return;
+  const segs = Math.max(2, Math.round((z1 - z0) / 1.6));
+  for (let i = 0; i < segs; i++) {
+    const za = z0 + ((z1 - z0) * i) / segs, zb = z0 + ((z1 - z0) * (i + 1)) / segs;
+    const pa = proj(za), pb = proj(zb);
+    const h = 18;
+    ctx.fillStyle = i % 2 ? "#d8873b" : "#e8e2d4";
+    ctx.beginPath();
+    ctx.moveTo(screenX(lat, pa) - 4 * pa, screenY(pa));
+    ctx.lineTo(screenX(lat, pb) - 4 * pb, screenY(pb));
+    ctx.lineTo(screenX(lat, pb) + 4 * pb, screenY(pb) - h * pb);
+    ctx.lineTo(screenX(lat, pa) + 4 * pa, screenY(pa) - h * pa);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function drawPlayer() {
+  const p = 1;
+  const x = screenX(game.x, p), y = PLAYER_SCREEN_Y + 34;
+  const lean = Math.max(-1, Math.min(1, (game.lane - game.x) * 2.2));
+  const w = PLAYER_HALF_W * 2 * LANE_PX, h = 78;
+  ctx.save();
+  ctx.translate(x, y - h / 2);
+  ctx.rotate(lean * 0.16);
+  const body = game.state === "dead" ? "#f4544c" : "#4da3ff";
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w * (1 - Math.abs(lean) * 0.22), h, 9); ctx.fill();
+  ctx.fillStyle = "#2b6cb0";
+  ctx.fillRect(-w / 2 + 6, -h / 2 + 14, w * (1 - Math.abs(lean) * 0.22) - 12, 16);
+  ctx.fillStyle = "#1d3550";
+  ctx.fillRect(-w / 2 + 5, h / 2 - 16, w * (1 - Math.abs(lean) * 0.22) - 10, 9);
+  ctx.restore();
+}
+
+function drawHUD(now) {
+  ctx.fillStyle = "#8792a6";
+  ctx.font = "12px ui-monospace, monospace";
+  ctx.textAlign = "left";
+  ctx.fillText("score " + game.score, 12, 22);
+  ctx.fillText("deaths " + game.deaths, 12, 38);
+  ctx.textAlign = "right";
+  const m = multiplier();
+  ctx.fillStyle = m >= 2.5 ? "#3ecf8e" : "#d7dde8";
+  ctx.fillText(m.toFixed(2) + "x", W - 12, 22);
+  ctx.fillStyle = "#8792a6";
+  ctx.fillText("payout $" + (ENTRY_FEE * m).toFixed(2), W - 12, 38);
+  ctx.textAlign = "left";
+  if (Bot.mode) {
+    ctx.fillStyle = "#f5b942";
+    ctx.fillText("BOT: " + Bot.mode, 12, 54);
+  }
+  // cash-out progress
+  if (game.cashTimer > 0 && game.state === "running") {
+    const frac = Math.min(1, game.cashTimer / CASH_HOLD);
+    ctx.fillStyle = "rgba(62,207,142,0.25)";
+    ctx.fillRect(W / 2 - 70, 60, 140, 14);
+    ctx.fillStyle = "#3ecf8e";
+    ctx.fillRect(W / 2 - 70, 60, 140 * frac, 14);
+    ctx.fillStyle = "#0b0e13";
+    ctx.font = "10px ui-monospace, monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("CASHING OUT", W / 2, 71);
+    ctx.textAlign = "left";
+  }
+  ctx.textAlign = "center";
+  if (game.state === "idle") {
+    ctx.fillStyle = "#d7dde8";
+    ctx.font = "14px ui-monospace, monospace";
+    ctx.fillText("swipe or press an arrow key to start", W / 2, H / 2);
+  } else if (game.state === "cashed") {
+    ctx.fillStyle = "#3ecf8e";
+    ctx.font = "16px ui-monospace, monospace";
+    ctx.fillText("CASHED OUT  $" + game.banked.toFixed(2), W / 2, H / 2);
+  } else if (game.state === "dead") {
+    ctx.fillStyle = "#f4544c";
+    ctx.font = "15px ui-monospace, monospace";
+    ctx.fillText("CRASHED — payout forfeited", W / 2, H / 2);
+  }
+  ctx.textAlign = "left";
+  if (game.flash > 0) {
+    ctx.fillStyle = "rgba(244,84,76," + (game.flash * 0.25) + ")";
+    ctx.fillRect(0, 0, W, H);
+    game.flash = Math.max(0, game.flash - 0.05);
+  }
+}
+
+/* ========================= INPUT PIPELINE =========================
+   Humans and bots feed the exact same pipeline. The detector only ever
+   sees what comes out of it. */
+const Input = {
+  active: null,
+  begin(x, y, trusted, source) {
+    this.active = { points: [{ x, y, t: performance.now() }], trusted, source, applied: false };
+  },
+  move(x, y) {
+    const s = this.active;
+    if (!s) return;
+    s.points.push({ x, y, t: performance.now() });
+    if (!s.applied) {
+      const dx = x - s.points[0].x;
+      if (Math.abs(dx) >= SWIPE_THRESHOLD) {
+        s.applied = true;
+        if (game.state === "idle") resetRun();
+        laneChange(dx > 0 ? 1 : -1, null);
+      }
+    }
+  },
+  end() {
+    const s = this.active;
+    this.active = null;
+    if (!s || !s.applied) return;
+    AC.recordSwipe({
+      points: s.points,
+      trusted: s.trusted,
+      source: s.source,
+      dur: s.points[s.points.length - 1].t - s.points[0].t,
+    });
+  },
+};
+
+cv.addEventListener("pointerdown", e => {
+  if (Bot.mode) return;
+  cv.setPointerCapture(e.pointerId);
+  Input.begin(e.offsetX, e.offsetY, e.isTrusted, "pointer");
+});
+cv.addEventListener("pointermove", e => {
+  if (Bot.mode) return;
+  if (Input.active) Input.move(e.offsetX, e.offsetY);
+});
+cv.addEventListener("pointerup", () => { if (!Bot.mode) Input.end(); });
+cv.addEventListener("pointercancel", () => { if (!Bot.mode) Input.end(); });
+
+window.addEventListener("keydown", e => {
+  if (Bot.mode) return;
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  e.preventDefault();
+  if (game.state === "idle") resetRun();
+  laneChange(e.key === "ArrowRight" ? 1 : -1, null);
+  AC.recordKey(e.isTrusted);
+});
+
+/* ============================== BOT ==============================
+   Two attack modes, both driven through the same Input pipeline:
+   - perfect: instant reaction, machine-clean synthetic swipes.
+   - mirror:  replay of a small corpus of "recorded human" traces,
+              perturbed per use, with sampled human-ish reaction times.
+              This is the replayed-human-swipe attack class. */
+const Bot = {
+  mode: null,
+  rand: mulberry32(99),
+  pending: null,
+  swipeRun: null,
+  baseTraces: [],
+
+  buildCorpus() {
+    const mk = seed => {
+      const r = mulberry32(seed);
+      const n = 14, dur = 150 + r() * 70, len = 115 + r() * 30, arc = (r() - 0.5) * 18;
+      const skew = 0.38 + r() * 0.18;
+      const pts = [];
+      for (let i = 0; i < n; i++) {
+        const u = i / (n - 1);
+        const p = u < skew ? (u / skew) * (u / skew) * 0.5
+                           : 0.5 + (1 - Math.pow(1 - (u - skew) / (1 - skew), 2)) * 0.5;
+        pts.push({
+          x: p * len + (r() - 0.5) * 2.6,
+          y: Math.sin(u * Math.PI) * arc + (r() - 0.5) * 2.2,
+          t: u * dur,
+        });
+      }
+      return pts;
+    };
+    this.baseTraces = [mk(11), mk(23), mk(37), mk(53)];
+  },
+
+  set(mode) {
+    this.mode = mode;
+    this.pending = null;
+    this.swipeRun = null;
+    Input.active = null;
+    if (mode && game.state === "idle") resetRun();
+    document.getElementById("btnHuman").classList.toggle("active", !mode);
+    document.getElementById("btnPerfect").classList.toggle("active", mode === "perfect");
+    document.getElementById("btnMirror").classList.toggle("active", mode === "mirror");
+  },
+
+  // a candidate lane must be free of near traffic and not walled off by a rail
+  laneClear(l, threatCar) {
+    if (barrierBlocks(game.lane, l, game.speed * 0.35)) return false;
+    const lead = game.speed * 0.30;
+    for (const car of game.cars) {
+      if (car === threatCar || car.passed || car.lane !== l) continue;
+      if (car.z + CAR_HALF_L > -PLAYER_HALF_L - lead * 0 && car.z - CAR_HALF_L < lead) return false;
+    }
+    return true;
+  },
+
+  safeDir() {
+    let threat = null, next = null;
+    for (const car of game.cars) {
+      if (car.passed || car.z - CAR_HALF_L <= PLAYER_HALF_L) continue;
+      if (car.lane !== game.lane) continue;
+      if (!threat || car.z < threat.z) threat = car;
+    }
+    if (!threat) {
+      // drift out of the cash-out lane so runs don't end (bots farm, not bank)
+      if (game.lane === CASH_LANE && this.laneClear(CASH_LANE - 1, null)) return -1;
+      return 0;
+    }
+    for (const car of game.cars) {
+      if (car.passed || car === threat || car.z <= threat.z) continue;
+      if (!next || car.z < next.z) next = car;
+    }
+    const tti = threat.z / game.speed;
+    if (tti > (this.mode === "perfect" ? 0.75 : THREAT_WINDOW)) return 0;
+    const cands = [];
+    for (const dir of [-1, 1]) {
+      const l = game.lane + dir;
+      if (l < 0 || l >= LANES) continue;
+      if (!this.laneClear(l, threat)) continue;
+      let carInL = false;
+      for (const car of game.cars) {
+        if (!car.passed && car.lane === l && Math.abs(car.z - threat.z) < 4) { carInL = true; break; }
+      }
+      if (carInL) continue;
+      cands.push({ dir, future: (next && next.lane === l ? 1 : 0) + (l === CASH_LANE ? 1 : 0) });
+    }
+    if (cands.length) {
+      cands.sort((a, b) => a.future - b.future);
+      if (cands.length === 2 && cands[0].future === cands[1].future)
+        return this.rand() < 0.5 ? cands[0].dir : cands[1].dir;
+      return cands[0].dir;
+    }
+    return 0; // boxed in: wait for near traffic to pass, retry next tick
+  },
+
+  tick(now) {
+    if (!this.mode || game.state !== "running") {
+      if (game.state !== "running") { this.pending = null; this.swipeRun = null; }
+      return;
+    }
+
+    if (this.swipeRun) {
+      const s = this.swipeRun;
+      const el = now - s.t0;
+      while (s.i < s.trace.length && s.trace[s.i].t <= el) {
+        const p = s.trace[s.i++];
+        Input.move(s.startX + p.x * s.dir, s.startY + p.y);
+      }
+      if (s.i >= s.trace.length) { this.swipeRun = null; Input.end(); }
+      return;
+    }
+
+    if (this.pending) {
+      if (now >= this.pending.fireAt) {
+        this.pending = null;
+        const dir = this.safeDir(); // re-validate at fire time
+        if (dir) this.startSwipe(dir, now);
+      }
+      return;
+    }
+
+    const dir = this.safeDir();
+    if (!dir) return;
+
+    if (this.mode === "perfect") {
+      this.startSwipe(dir, now);
+    } else {
+      const rt = Math.max(150, gauss(this.rand, 235, 42));
+      this.pending = { fireAt: now + rt, dir };
+    }
+  },
+
+  startSwipe(dir, now) {
+    const trusted = document.getElementById("hwInject").checked;
+    const startX = screenX(game.x, 1) + (this.rand() - 0.5) * 10;
+    const startY = 480 + (this.rand() - 0.5) * 24;
+    Input.begin(startX, startY, trusted, "bot");
+    let trace;
+    if (this.mode === "perfect") {
+      trace = [];
+      for (let i = 1; i <= 8; i++) trace.push({ x: (i / 8) * 110, y: 0, t: (i / 8) * 90 });
+    } else {
+      const base = this.baseTraces[(this.rand() * this.baseTraces.length) | 0];
+      const scale = 0.96 + this.rand() * 0.08, tScale = 0.96 + this.rand() * 0.08;
+      trace = base.map(p => ({
+        x: p.x * scale + (this.rand() - 0.5) * 1.6,
+        y: p.y * scale + (this.rand() - 0.5) * 1.6,
+        t: p.t * tScale,
+      }));
+    }
+    this.swipeRun = { trace, i: 0, dir, startX, startY, t0: now };
+  },
+};
+Bot.buildCorpus();
+
+/* =========================== ANTI-CHEAT ===========================
+   Pure behavioral analysis over the input/telemetry stream. It has no
+   knowledge of Bot.mode. Signals:
+   1. reaction   — dodge reaction-time distribution (superhuman floor, too-low variance)
+   2. kinematics — swipe micro-motion (motor noise, velocity-profile diversity)
+   3. replay     — near-duplicate swipe shapes (recorded-trace replay, even perturbed)
+   4. perfection — dodge margins + survival that humans don't produce
+   5. integrity  — synthetic event provenance (isTrusted), coordinate granularity */
+const AC = {
+  swipes: [], rts: [], margins: [],
+  deaths: 0, dodges: 0, rowsPassed: 0,
+  untrustedSeen: false, keyboardOnly: true,
+
+  recordSwipe(s) {
+    this.keyboardOnly = false;
+    if (!s.trusted) this.untrustedSeen = true;
+    if (s.points.length >= 5 && s.dur > 30) {
+      this.swipes.push(this.featurize(s));
+      if (this.swipes.length > 80) this.swipes.shift();
+    }
+  },
+  recordKey(trusted) { if (!trusted) this.untrustedSeen = true; },
+  recordDodge(rt, margin) {
+    this.dodges++;
+    if (rt > 40 && rt < 2000) this.rts.push(rt);
+    if (margin > 0) this.margins.push(margin);
+    if (this.rts.length > 120) this.rts.shift();
+    if (this.margins.length > 120) this.margins.shift();
+  },
+  recordDeath() { this.deaths++; },
+
+  reset() {
+    this.swipes = []; this.rts = []; this.margins = [];
+    this.deaths = 0; this.dodges = 0; this.rowsPassed = 0;
+    this.untrustedSeen = false; this.keyboardOnly = true;
+    game.deaths = 0; game.score = 0;
+  },
+
+  featurize(s) {
+    const pts = s.points;
+    const res = this.resample(pts, 16);
+    let jitter = 0, jn = 0;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const mx = (pts[i - 1].x + pts[i + 1].x) / 2, my = (pts[i - 1].y + pts[i + 1].y) / 2;
+      jitter += Math.hypot(pts[i].x - mx, pts[i].y - my); jn++;
+    }
+    jitter = jn ? jitter / jn : 0;
+    let peakV = 0, peakT = 0.5;
+    const t0 = pts[0].t, dur = pts[pts.length - 1].t - t0 || 1;
+    for (let i = 1; i < pts.length; i++) {
+      const dt = pts[i].t - pts[i - 1].t || 1;
+      const v = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y) / dt;
+      if (v > peakV) { peakV = v; peakT = (pts[i].t - t0) / dur; }
+    }
+    let ints = 0;
+    for (const p of pts) if (p.x === Math.round(p.x) && p.y === Math.round(p.y)) ints++;
+    return { res, jitter, peakT, dur: s.dur, trusted: s.trusted, intFrac: ints / pts.length };
+  },
+
+  resample(pts, n) {
+    const d = [0];
+    for (let i = 1; i < pts.length; i++)
+      d.push(d[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+    const total = d[d.length - 1] || 1;
+    const out = [];
+    for (let k = 0; k < n; k++) {
+      const target = (k / (n - 1)) * total;
+      let i = 1;
+      while (i < d.length - 1 && d[i] < target) i++;
+      const span = d[i] - d[i - 1] || 1;
+      const u = (target - d[i - 1]) / span;
+      out.push({
+        x: (pts[i - 1].x + (pts[i].x - pts[i - 1].x) * u - pts[0].x) / total,
+        y: (pts[i - 1].y + (pts[i].y - pts[i - 1].y) * u - pts[0].y) / total,
+      });
+    }
+    if (out[n - 1].x < 0) for (const p of out) p.x = -p.x;
+    return out;
+  },
+
+  shapeDist(a, b) {
+    let s = 0;
+    for (let i = 0; i < a.length; i++) s += Math.hypot(a[i].x - b[i].x, a[i].y - b[i].y);
+    return s / a.length;
+  },
+
+  stats(arr) {
+    const n = arr.length;
+    const mean = arr.reduce((a, b) => a + b, 0) / n;
+    const sd = Math.sqrt(arr.reduce((a, b) => a + (b - mean) * (b - mean), 0) / n);
+    return { mean, sd, min: Math.min(...arr), cv: mean ? sd / mean : 0 };
+  },
+
+  analyze() {
+    const signals = [];
+    const flags = [];
+
+    // 1. reaction time
+    {
+      const ready = this.rts.length >= 6;
+      let sus = 0, detail = "need " + Math.max(0, 6 - this.rts.length) + " more dodges";
+      if (ready) {
+        const st = this.stats(this.rts);
+        sus = 0;
+        if (st.min < 130) { sus += 0.55; flags.push("superhuman reaction floor: " + st.min.toFixed(0) + "ms"); }
+        if (st.cv < 0.10) { sus += 0.5; flags.push("reaction variance impossibly tight (cv " + st.cv.toFixed(2) + ")"); }
+        else if (st.cv < 0.17) sus += 0.25;
+        if (st.mean < 165) sus += 0.3;
+        sus = Math.min(1, sus);
+        detail = "mean " + st.mean.toFixed(0) + "ms · sd " + st.sd.toFixed(0) + " · min " + st.min.toFixed(0) + " · cv " + st.cv.toFixed(2);
+      }
+      signals.push({ name: "reaction time", sus, ready, detail });
+    }
+
+    // 2. swipe kinematics
+    {
+      const sw = this.swipes;
+      const ready = sw.length >= 6;
+      let sus = 0, detail = this.keyboardOnly ? "keyboard play — n/a" : "need " + Math.max(0, 6 - sw.length) + " more swipes";
+      if (ready) {
+        const jit = this.stats(sw.map(s => s.jitter));
+        const peaks = this.stats(sw.map(s => s.peakT));
+        sus = 0;
+        if (jit.mean < 0.30) { sus += 0.6; flags.push("swipes have no motor noise (jitter " + jit.mean.toFixed(2) + "px)"); }
+        else if (jit.mean < 0.55) sus += 0.25;
+        if (peaks.sd < 0.035) { sus += 0.35; flags.push("velocity profiles machine-uniform"); }
+        sus = Math.min(1, sus);
+        detail = "jitter " + jit.mean.toFixed(2) + "px · peak-pos sd " + peaks.sd.toFixed(3);
+      }
+      signals.push({ name: "swipe kinematics", sus, ready: ready && !this.keyboardOnly, detail });
+    }
+
+    // 3. replay similarity
+    {
+      const sw = this.swipes.slice(-40);
+      const ready = sw.length >= 8;
+      let sus = 0, detail = this.keyboardOnly ? "keyboard play — n/a" : "need " + Math.max(0, 8 - sw.length) + " more swipes";
+      if (ready) {
+        let close = 0, pairs = 0;
+        for (let i = 0; i < sw.length; i++)
+          for (let j = i + 1; j < sw.length; j++) {
+            pairs++;
+            if (this.shapeDist(sw[i].res, sw[j].res) < 0.015) close++;
+          }
+        const frac = pairs ? close / pairs : 0;
+        sus = Math.min(1, Math.max(0, (frac - 0.06) / 0.28));
+        if (frac > 0.30) flags.push("swipe shapes repeat: " + (frac * 100).toFixed(0) + "% near-duplicate pairs (trace replay)");
+        detail = (frac * 100).toFixed(0) + "% near-duplicate shape pairs across " + sw.length + " swipes";
+      }
+      signals.push({ name: "replay similarity", sus, ready: ready && !this.keyboardOnly, detail });
+    }
+
+    // 4. perfection
+    {
+      const ready = this.dodges >= 12;
+      let sus = 0, detail = "need " + Math.max(0, 12 - this.dodges) + " more dodges";
+      if (ready) {
+        sus = 0;
+        if (this.margins.length >= 8) {
+          const m = this.stats(this.margins);
+          if (m.cv < 0.22) { sus += 0.45; flags.push("dodge margins metronome-consistent (cv " + m.cv.toFixed(2) + ")"); }
+          detail = "margin cv " + m.cv.toFixed(2) + " · ";
+        } else detail = "";
+        const dodgesPerDeath = this.dodges / Math.max(1, this.deaths);
+        if (this.deaths === 0 && this.dodges >= 40) { sus += 0.5; flags.push("zero deaths across " + this.dodges + " dodges"); }
+        else if (dodgesPerDeath > 60) sus += 0.3;
+        sus = Math.min(1, sus);
+        detail += this.dodges + " dodges · " + this.deaths + " deaths";
+      }
+      signals.push({ name: "perfection", sus, ready, detail });
+    }
+
+    // 5. event integrity
+    {
+      const sw = this.swipes;
+      const ready = sw.length >= 3 || this.untrustedSeen;
+      let sus = 0, detail = "collecting";
+      if (ready) {
+        sus = 0;
+        if (this.untrustedSeen) { sus += 0.8; flags.push("synthetic input events (isTrusted=false)"); }
+        if (sw.length >= 5) {
+          const intFrac = sw.reduce((a, s) => a + s.intFrac, 0) / sw.length;
+          detail = this.untrustedSeen ? "synthetic events observed" : "events trusted · int-coord " + (intFrac * 100).toFixed(0) + "%";
+        } else detail = this.untrustedSeen ? "synthetic events observed" : "events trusted";
+        sus = Math.min(1, sus);
+      }
+      signals.push({ name: "event integrity", sus, ready, detail });
+    }
+
+    const weights = { "reaction time": 0.27, "swipe kinematics": 0.24, "replay similarity": 0.27, "perfection": 0.12, "event integrity": 0.10 };
+    let wsum = 0, acc = 0, readyCount = 0;
+    for (const s of signals) {
+      if (!s.ready) continue;
+      readyCount++;
+      wsum += weights[s.name];
+      acc += weights[s.name] * s.sus;
+    }
+    let overall = wsum ? acc / wsum : 0;
+    // a single high-confidence detector escalates on its own; an ensemble
+    // average must not wash out a smoking gun like wholesale trace replay
+    let maxSus = 0;
+    for (const s of signals) if (s.ready && s.sus > maxSus) maxSus = s.sus;
+    if (maxSus >= 0.85) overall = Math.max(overall, maxSus * 0.75);
+    return { signals, flags, overall, ready: readyCount >= 2 };
+  },
+};
+
+/* ============================== UI ============================== */
+const elSignals = document.getElementById("signals");
+const elFlags = document.getElementById("flags");
+const elStats = document.getElementById("stats");
+const elBadge = document.getElementById("badge");
+
+function renderPanel() {
+  const r = AC.analyze();
+  window.__acState = { overall: r.overall, ready: r.ready, flags: r.flags, dodges: AC.dodges, deaths: AC.deaths, swipes: AC.swipes.length };
+
+  if (!r.ready) { elBadge.textContent = "WARMING UP"; elBadge.className = "badge na"; }
+  else if (r.overall < 0.33) { elBadge.textContent = "HUMAN"; elBadge.className = "badge human"; }
+  else if (r.overall < 0.58) { elBadge.textContent = "SUSPECT"; elBadge.className = "badge suspect"; }
+  else { elBadge.textContent = "BOT"; elBadge.className = "badge bot"; }
+
+  elSignals.innerHTML = r.signals.map(s => {
+    const pct = Math.round(s.sus * 100);
+    const color = !s.ready ? "#3a465e" : s.sus < 0.33 ? "var(--ok)" : s.sus < 0.6 ? "var(--warn)" : "var(--bad)";
+    return `<div class="signal">
+      <div class="row"><span class="name">${s.name}</span><span class="val">${s.ready ? pct + "% suspicious" : "…"}</span></div>
+      <div class="bar"><i style="width:${s.ready ? pct : 0}%;background:${color}"></i></div>
+      <div class="detail">${s.detail}</div>
+    </div>`;
+  }).join("");
+
+  elFlags.innerHTML = r.flags.map(f => "<div>⚑ " + f + "</div>").join("");
+  elStats.textContent =
+    `dodges ${AC.dodges} · deaths ${AC.deaths} · swipes ${AC.swipes.length} · cars passed ${AC.rowsPassed}` +
+    ` · confidence ${(r.overall * 100).toFixed(0)}%`;
+}
+setInterval(renderPanel, 400);
+
+document.getElementById("btnHuman").onclick = () => Bot.set(null);
+document.getElementById("btnPerfect").onclick = () => { AC.reset(); Bot.set("perfect"); };
+document.getElementById("btnMirror").onclick = () => { AC.reset(); Bot.set("mirror"); };
+document.getElementById("btnReset").onclick = () => { AC.reset(); };
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
