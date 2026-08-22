@@ -61,6 +61,44 @@ Aggregation is a weighted blend with escalation: one smoking-gun signal, or seve
 independently suspicious ones, overrides the average — an ensemble mean must not wash
 out convergent evidence.
 
+## The arms race, measured
+
+The generative bot has an **organic noise evasion** toggle. Off, it perturbs traces with
+iid Gaussian noise — the naive choice. On, it synthesizes the actual structure of human
+motor noise: pink (1/f) noise via Voss-McCartney, an 8-12 Hz physiological tremor, and
+low-frequency drift. Measured over 40 synthesized swipes per model:
+
+| noise model | Δ⁴/Δ² whiteness | jitter | caught by motor forensics? |
+|---|---|---|---|
+| iid Gaussian | 2.40 | 1.76 px | yes |
+| pink + tremor + drift | 1.88 | 1.60 px | **no** |
+
+That is the honest conclusion, and it is the reason this bench exists: **swipe-level
+motor forensics are defeatable by an attacker who models human motor noise properly.**
+They remain worth shipping (they catch the 90% of bots that don't bother), but they
+cannot be the last line. What survives the evasion is the layer the attacker cannot fake
+without giving up the profit motive:
+
+- **behavior texture** — never aborting a gesture, never entering contested space,
+  never banking a run
+- **the economy** — see below
+
+## Why the economy is the strongest detector
+
+With a $5 entry, a $10 head-to-head pot, and a ~20% rake, the winner nets +$3 and the
+loser −$5. Break-even win rate is `3p − 5(1−p) = 0 → p = 62.5%`.
+
+A bot is therefore trapped: it must sustain **>62.5%** to be worth running at all, and a
+sustained 62.5%+ win rate over a few hundred games sits far above the 99.9th percentile
+of the real player distribution. Throttling down to look human pushes it below the rake
+wall, where botting stops making money. Unlike every swipe-level signal, this one cannot
+be spoofed by better trace synthesis — it is enforced by arithmetic, not by forensics.
+
+The corollary for detection design: **rank accounts by win-rate z-score against the
+population, then use the behavioral signals as corroboration** before acting. That
+ordering keeps false-positive bans near zero, which matters a lot when a ban means
+withholding someone's cash balance.
+
 ## Honest scope
 
 - **Thresholds are first-principles priors.** No real human swipe corpus has been

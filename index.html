@@ -179,6 +179,14 @@
       <input type="checkbox" id="hwInject">
       simulate hardware-level injection (events arrive trusted, like a phone-farm rig)
     </label>
+    <label class="toggle">
+      <input type="checkbox" id="organicNoise">
+      generative bot: organic noise evasion (pink 1/f + 8-12Hz tremor + drift instead of iid Gaussian)
+    </label>
+    <label class="toggle">
+      <input type="checkbox" id="showHitbox">
+      show hitboxes (player box rotates with heading and shrinks while angled)
+    </label>
   </div>
 
   <section class="card">
@@ -221,16 +229,19 @@ const rng = mulberry32(1337);
 const cv = document.getElementById("game");
 const ctx = cv.getContext("2d");
 const W = cv.width, H = cv.height;
-const LANES = 4;                 // 0..2 traffic, 3 = cashout
+// 4 lanes: 0 = rainbow (5x score), 1 = middle (2x), 2 = right (1x),
+// 3 = far-right cashout lane (no scoring, hold it to bank the run)
+const LANES = 4;
 const CASH_LANE = 3;
+const LANE_MULT = [5, 2, 1, 0];
 const LANE_PX = 62;              // lane width in px at the player plane
 const ZPX = 14.5;                // px per z unit at the player plane
 const PLAYER_SCREEN_Y = 640;
 const SPAWN_Z = 55;
 const SWIPE_THRESHOLD = 28;
 const THREAT_WINDOW = 1.15;      // s of time-to-impact at which a blocking car becomes a threat
-const MAX_STEER = 0.52;          // ~30° heading during a lane change
-const STEER_RATE = 9;            // how fast the heading eases toward its target
+const MAX_STEER = 0.60;          // ~34° peak heading during a lane change
+const STEER_RATE = 22;           // how fast the heading snaps to its target
 const HIT_HW = 25;               // hitbox half-width in px (visual car is 29)
 const HIT_HL = 50;               // hitbox half-length in px (visual car is 54)
 const HLZ = HIT_HL / ZPX;        // car half-length in z units (~3.45)
@@ -275,7 +286,7 @@ const FONT = "'Luckiest Guy', 'Arial Black', sans-serif";
 // green cashout boundary at 2.5, road edges -1.6 and 3.5
 function proj(z) { return 1 / (1 + z * 0.006); }
 function screenY(z) { return PLAYER_SCREEN_Y - 14.5 * z / (1 + 0.004 * z); }
-function screenX(lat, p) { return W / 2 + (lat - 0.95) * LANE_PX * p; }
+function screenX(lat, p) { return W / 2 + (lat - 1.5) * LANE_PX * p; }
 
 /* ============================== GAME ============================== */
 const game = {
@@ -285,7 +296,10 @@ const game = {
   theta: 0,                      // heading (rad); the sprite rotation IS the physics state
   cars: [],                      // {lane, z, f (forward-speed fraction), col}
   barriers: [],                  // {boundary (0..2), z0, z1}
-  speed: 16,
+  speed: 15,
+  runT: 0,
+  density: 0.55,
+  lastGain: null,
   dist: 0,
   score: 0,
   deaths: 0,
@@ -307,16 +321,18 @@ const CAR_COLORS = [
   { body: "#e8e8e8", dark: "#b9b9bd" },
 ];
 
-function multiplier() { return Math.min(2.5, 1 + game.score * 0.01); }
+function multiplier() { return Math.min(2.5, 1 + game.score * 0.004); }
 
 function resetRun() {
   game.cars = []; game.barriers = []; game.particles = [];
   game.lane = 1; game.x = 1; game.theta = 0;
   game.lastOpen = 1;
-  game.speed = 16; game.waveGap = 34;
+  game.speed = 15; game.waveGap = 34;
+  game.runT = 0; game.density = 0.55;
   game.zSinceWave = game.waveGap;
   game.dist = 0; game.score = 0;
   game.cashTimer = 0;
+  game.lastGain = null;
   game.state = "running";
 }
 
@@ -325,8 +341,8 @@ function spawnWave() {
   // always reachable. Lane 3 (cashout) gets its own occasional traffic.
   const r = rng();
   let open = game.lastOpen;
-  if (r < 0.36) open = Math.max(0, open - 1);
-  else if (r < 0.72) open = Math.min(2, open + 1);
+  if (r < 0.38) open = Math.max(0, open - 1);
+  else if (r < 0.76) open = Math.min(2, open + 1);
   const needCross = open !== game.lastOpen ? Math.min(open, game.lastOpen) : -1;
   game.lastOpen = open;
 
@@ -340,7 +356,7 @@ function spawnWave() {
   });
   for (let l = 0; l < 3; l++) {
     if (l === open) continue;
-    if (rng() < 0.62) game.cars.push(mkCar(l));
+    if (rng() < game.density) game.cars.push(mkCar(l));
   }
   if (rng() < 0.25) game.cars.push(mkCar(CASH_LANE));
 
@@ -433,6 +449,13 @@ function frame(now) {
   lastFrame = now;
 
   if (game.state === "running") {
+    // difficulty ramps continuously with distance: the road speeds up and the
+    // waves pack tighter, so the reaction window shrinks the longer you survive
+    game.runT += dt;
+    game.speed = Math.min(34, 15 + game.runT * 0.42);
+    game.waveGap = Math.max(19, 34 - game.runT * 0.30);
+    game.density = Math.min(0.9, 0.55 + game.runT * 0.007);
+
     const dz = game.speed * dt;
     game.dist += dz;
     game.zSinceWave += dz;
@@ -474,10 +497,11 @@ function frame(now) {
       }
       if (!car.passed && car.z < -COLL_Z) {
         car.passed = true;
-        game.score++;
+        // score is multiplied by the lane you were in when you passed
+        const mult = LANE_MULT[game.lane];
+        game.score += mult;
+        if (mult) game.lastGain = { mult, at: now, y: PLAYER_SCREEN_Y - 90 };
         AC.rowsPassed++;
-        game.speed = Math.min(30, game.speed + 0.3);
-        game.waveGap = Math.max(24, game.waveGap - 0.10);
       }
       if (!car.passed && Math.abs(car.z) < COLL_Z + 2 &&
           rectHit(pcx, 0, game.theta, car.lane * LANE_PX, car.z * ZPX, HIT_HW, HIT_HL)) {
@@ -575,6 +599,7 @@ function draw(now, dt) {
   for (const it of items) it.t === "car" ? drawTraffic(it.o) : drawBarrier(it.o);
 
   drawPlayer();
+  if (document.getElementById("showHitbox").checked) drawHitboxes();
   drawParticles(dt);
   ctx.restore();
 
@@ -651,18 +676,19 @@ function quad(latA, latB, z1, z2, fill) {
 function drawRoad() {
   const Z0 = -14, Z1 = SPAWN_Z + 6;
   // curbs
-  quad(-1.78, -1.6, Z0, Z1, "#4a463f");
+  quad(-0.68, -0.5, Z0, Z1, "#4a463f");
   quad(3.5, 3.68, Z0, Z1, "#54524e");
-  // asphalt (shoulder through cashout lane)
-  quad(-1.6, 3.5, Z0, Z1, "#6d6f73");
-  // solid white edge line (right)
+  // asphalt: lane 0 (rainbow) through the cashout lane
+  quad(-0.5, 3.5, Z0, Z1, "#6d6f73");
+  // solid white edge lines
+  quad(-0.5, -0.44, Z0, Z1, "#e8e8e8");
   quad(3.44, 3.5, Z0, Z1, "#e8e8e8");
   // green cashout boundary
   quad(2.47, 2.53, Z0, Z1, "#2ed94f");
-  // dashed separators: shoulder|0, 0|1, 1|2
+  // dashed separators: 0|1 and 1|2
   const dashLen = 2.6, gap = 4.6, period = dashLen + gap;
   const off = game.dist % period;
-  for (const b of [-0.55, 0.5, 1.5]) {
+  for (const b of [0.5, 1.5]) {
     for (let zi = -3; zi < 10; zi++) {
       const z = zi * period - off;
       const za = Math.max(-14, z), zb = z + dashLen;
@@ -707,13 +733,13 @@ function drawRainbow() {
   const pa = proj(0), pb = proj(zTop);
   ctx.save();
   ctx.filter = "blur(7px)";
-  ctx.globalAlpha = 0.92;
+  ctx.globalAlpha = 0.62;
   ctx.fillStyle = g;
   ctx.beginPath();
-  ctx.moveTo(screenX(-1.52, pa), yBot);
-  ctx.lineTo(screenX(-1.52, pb), yTop);
-  ctx.lineTo(screenX(-0.68, pb), yTop);
-  ctx.lineTo(screenX(-0.68, pa), yBot);
+  ctx.moveTo(screenX(-0.46, pa), yBot);
+  ctx.lineTo(screenX(-0.46, pb), yTop);
+  ctx.lineTo(screenX(0.46, pb), yTop);
+  ctx.lineTo(screenX(0.46, pa), yBot);
   ctx.closePath();
   ctx.fill();
   ctx.restore();
@@ -836,6 +862,51 @@ function drawBarrier(b) {
   }
 }
 
+/* Draws the ACTUAL collision geometry the physics uses (same math as rectHit),
+   so the shrinking rotated player box is visible while cornering. */
+function drawHitboxes() {
+  const toS = (cxPx, czZ) => ({ x: W / 2 + (cxPx / LANE_PX - 1.5) * LANE_PX, y: screenY(czZ) });
+  // player: rotated + shrunk exactly as the SAT test sees it
+  const th = game.theta;
+  const shrink = 1 - 0.5 * Math.min(1, Math.abs(th) / 0.35);
+  const hw = HIT_HW * shrink, hl = HIT_HL * shrink;
+  const c = Math.cos(th), s = Math.sin(th);
+  const pc = toS(game.x * LANE_PX, 0);
+  ctx.save();
+  ctx.strokeStyle = "#3ecf8e";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 4]);
+  ctx.beginPath();
+  const corners = [[hw, hl], [-hw, hl], [-hw, -hl], [hw, -hl]];
+  corners.forEach((q, i) => {
+    const x = pc.x + q[0] * c - q[1] * s;
+    const y = pc.y - (q[0] * s + q[1] * c);
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  });
+  ctx.closePath();
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#3ecf8e";
+  ctx.font = "10px ui-monospace, monospace";
+  ctx.textAlign = "center";
+  ctx.fillText((shrink * 100).toFixed(0) + "% · " + (th * 57.3).toFixed(0) + "°", pc.x, pc.y + hl + 14);
+  // obstacles (axis-aligned in world space)
+  ctx.strokeStyle = "#f4544c";
+  ctx.lineWidth = 1.5;
+  for (const car of game.cars) {
+    if (car.passed || car.z > SPAWN_Z || car.z < -8) continue;
+    const a = toS(car.lane * LANE_PX, car.z + HLZ), b = toS(car.lane * LANE_PX, car.z - HLZ);
+    ctx.strokeRect(a.x - HIT_HW, a.y, HIT_HW * 2, b.y - a.y);
+  }
+  ctx.strokeStyle = "#f5b942";
+  for (const bar of game.barriers) {
+    if (bar.z1 < -8 || bar.z0 > SPAWN_Z) continue;
+    const a = toS((bar.boundary + 0.5) * LANE_PX, bar.z1), b = toS((bar.boundary + 0.5) * LANE_PX, bar.z0);
+    ctx.strokeRect(a.x - 4, a.y, 8, b.y - a.y);
+  }
+  ctx.restore();
+}
+
 function drawParticles(dt) {
   for (const p of game.particles) {
     p.age += dt;
@@ -869,6 +940,21 @@ function drawHUD() {
   otext("SCORE: " + game.score, W / 2, 192, 26, "#ffffff", "#1c1c1c", 6);
   const m = Math.round(multiplier() * 2) / 2;
   otext((m % 1 === 0 ? m : m.toFixed(1)) + "X", W / 2, 250, 54, "#3c3f45", "#ffffff", 8);
+  // which lane you're in = how fast score accrues
+  const lm = LANE_MULT[game.lane];
+  otext(lm ? "LANE " + lm + "X" : "CASHOUT LANE", W / 2, 300, 22,
+    lm === 5 ? "#ff5ce1" : lm === 2 ? "#7ec9ff" : lm === 1 ? "#d7dde8" : "#3ede6a", "#1c1c1c", 5);
+  // floating +N on each pass
+  if (game.lastGain) {
+    const age = (performance.now() - game.lastGain.at) / 700;
+    if (age < 1) {
+      ctx.globalAlpha = 1 - age;
+      otext("+" + game.lastGain.mult, screenX(game.x, 1) + 46,
+        game.lastGain.y - age * 40, 30,
+        game.lastGain.mult === 5 ? "#ff5ce1" : "#ffffff", "#1c1c1c", 6);
+      ctx.globalAlpha = 1;
+    } else game.lastGain = null;
+  }
   if (game.cashTimer > 0) {
     const frac = Math.min(1, game.cashTimer / CASH_HOLD);
     ctx.fillStyle = "rgba(20,60,30,0.55)";
@@ -1128,9 +1214,11 @@ const Bot = {
     // survival overrides preference: when a hit is imminent, the cashout-lane
     // penalty vanishes and any better lane wins
     const dying = tHere < 0.7;
-    const cashPen = dying ? 0 : 1.2;
+    // value = safety + greed: the 5x lane is worth real risk, the cashout lane
+    // scores nothing so it is avoided unless banking. Survival overrides both.
+    const val = l => dying ? 0 : LANE_MULT[l] * 0.30;
     const margin = dying ? 0.05 : 0.6;
-    let best = here, bestU = clamp(tHere) - (here === CASH_LANE ? cashPen : 0);
+    let best = here, bestU = clamp(tHere) + val(here);
     for (let l = 0; l < LANES; l++) {
       if (l === here) continue;
       const dir = Math.sign(l - here);
@@ -1141,7 +1229,7 @@ const Bot = {
         if (step !== l && this.firstObs(step) < 0.9) { ok = false; break; }
       }
       if (!ok || !this.laneClear(l, null)) continue;
-      const u = clamp(this.firstObs(l)) - (l === CASH_LANE ? cashPen : 0) - 0.35 * Math.abs(l - here);
+      const u = clamp(this.firstObs(l)) + val(l) - 0.35 * Math.abs(l - here);
       if (u > bestU + margin) { best = l; bestU = u; }
     }
     if (best === here) return 0;
@@ -1209,20 +1297,46 @@ const Bot = {
         t: p.t * tScale,
       }));
     } else {
-      // generative: a FRESH random human-shaped trace every swipe with iid
-      // noise. Beats replay-similarity and jitter checks by construction;
-      // the tells left are statistical (white noise, no lapses, no texture).
+      // generative: a FRESH random human-shaped trace every swipe.
+      // Noise model depends on the evasion toggle:
+      //  - off: iid Gaussian (spectrally WHITE — the naive choice, caught by Δ⁴/Δ²)
+      //  - on:  pink (1/f) noise + 8-12Hz physiological tremor + low-freq drift,
+      //         i.e. the actual structure of human motor noise. This is the
+      //         evasion a serious attacker writes once whiteness is detected.
       const r = this.rand;
       const n = 14, dur = 130 + r() * 110, len = 95 + r() * 55, arc = (r() - 0.5) * 26;
       const skew = 0.32 + r() * 0.3;
+      const organic = document.getElementById("organicNoise").checked;
+      // pink noise via Voss-McCartney: summed octave-rate random sources give
+      // 1/f power, so successive samples are correlated instead of independent
+      const octaves = 5, srcX = [], srcY = [];
+      for (let k = 0; k < octaves; k++) { srcX.push(r() - 0.5); srcY.push(r() - 0.5); }
+      const tremHz = 8 + r() * 4, tremPh = r() * 6.283, tremAmp = 0.55 + r() * 0.5;
+      const driftX = (r() - 0.5) * 2.2, driftY = (r() - 0.5) * 2.6;
       trace = [];
       for (let i = 0; i < n; i++) {
         const u = i / (n - 1);
         const p = u < skew ? (u / skew) * (u / skew) * 0.5
                            : 0.5 + (1 - Math.pow(1 - (u - skew) / (1 - skew), 2)) * 0.5;
+        let nx, ny;
+        if (organic) {
+          // update only the octaves whose bit flipped this step (Voss)
+          for (let k = 0; k < octaves; k++) {
+            if (i % (1 << k) === 0) { srcX[k] = r() - 0.5; srcY[k] = r() - 0.5; }
+          }
+          const pinkX = srcX.reduce((a, b) => a + b, 0) / Math.sqrt(octaves);
+          const pinkY = srcY.reduce((a, b) => a + b, 0) / Math.sqrt(octaves);
+          const tSec = (u * dur) / 1000;
+          const trem = Math.sin(tremPh + 6.283 * tremHz * tSec) * tremAmp;
+          nx = pinkX * 2.6 + trem * 0.5 + driftX * u;
+          ny = pinkY * 2.6 + trem * 0.8 + driftY * u;
+        } else {
+          nx = (r() - 0.5) * 2.4;
+          ny = (r() - 0.5) * 2.2;
+        }
         trace.push({
-          x: p * len + (r() - 0.5) * 2.4,
-          y: Math.sin(u * Math.PI) * arc + (r() - 0.5) * 2.2,
+          x: p * len + nx,
+          y: Math.sin(u * Math.PI) * arc + ny,
           t: u * dur,
         });
       }
@@ -1842,6 +1956,10 @@ const AC = {
       if (s.sus > maxSus) maxSus = s.sus;
       if (s.sus >= 0.55) hot++;
     }
+    // Tiered enforcement: ONE strong signal is enough to flag for review
+    // (SUSPECT), but acting on an account (BOT) wants convergent evidence from
+    // independent signals — that is what keeps false-positive bans near zero.
+    if (maxSus >= 0.68) overall = Math.max(overall, 0.50);
     if (maxSus >= 0.85) overall = Math.max(overall, maxSus * 0.75);
     if (hot >= 2) overall = Math.max(overall, 0.62);
     if (hot >= 3) overall = Math.max(overall, 0.72);
