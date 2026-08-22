@@ -1,10 +1,29 @@
 # LaneGuard
 
-A working demo of behavioral anti-cheat for skill-money mobile games, built around an
-original simulation of a lane-change driving game (third-person camera, 4 lanes, a
-cash-out lane, barrier traps, angled-hitbox lane changes, payout multiplier up to 2.5x).
+A behavioral anti-cheat **test bench** for skill-money mobile games, built around an
+original simulation of a lane-change driving game (third-person camera, 4 lanes with a
+cash-out lane, moving traffic at varied speeds, barrier traps, real steering physics —
+the car banks to ~30° and its lateral velocity comes from the heading — with a rotated
+hitbox that shrinks while angled, payout multiplier up to 2.5x).
 
 Open `index.html` in any browser. No dependencies, no build step, no server required.
+Designed for a full-width monitor: game on the left, live forensics in the middle,
+verdict + event log on the right.
+
+## The bench
+
+- **Live swipe analysis** — every swipe is plotted the moment it lands: the raw path
+  with per-segment speed coloring, the normalized velocity profile, and the full
+  feature vector (duration, samples, path length, motor-noise jitter, Δ⁴/Δ² spectral
+  whiteness, implied noise σ, velocity-peak position, coordinate granularity, event
+  provenance, nearest-neighbor shape/timing distance, replay classification).
+- **Recent-swipe gallery** — thumbnails of the last 24 swipes, click to inspect;
+  red border = replay match, yellow = synthetic events.
+- **Distributions** — reaction-time and dodge-margin histograms with running
+  mean / cv / skew, updated per dodge.
+- **Event log** — timestamped stream of everything: per-swipe measurements, dodge
+  reaction times, contested-space entries and how they resolved, run endings with
+  payout, flags the moment they fire, and verdict transitions.
 
 ## What it shows
 

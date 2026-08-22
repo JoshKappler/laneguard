@@ -30,25 +30,57 @@
     min-height: 100vh;
     padding: 16px;
   }
-  header { text-align: center; margin-bottom: 12px; }
+  header { display: flex; align-items: baseline; gap: 16px; width: 100%; max-width: 1900px; margin-bottom: 12px; }
   header h1 { font-size: 18px; letter-spacing: 2px; }
-  header p { color: var(--muted); font-size: 12px; margin-top: 4px; }
-  .wrap { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
-  canvas {
+  header p { color: var(--muted); font-size: 12px; }
+  header .clock { margin-left: auto; color: var(--muted); font-size: 12px; }
+  .dash {
+    display: grid;
+    grid-template-columns: 404px minmax(620px, 1fr) 430px;
+    gap: 14px;
+    width: 100%;
+    max-width: 1900px;
+    align-items: start;
+  }
+  #game {
     border: 1px solid var(--border);
     border-radius: 24px;
     touch-action: none;
     display: block;
   }
-  .panel {
-    width: 360px;
+  .card, .panel {
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 14px;
+    padding: 12px 14px;
     font-size: 12px;
+    margin-bottom: 14px;
   }
-  .panel h2 { font-size: 13px; letter-spacing: 1px; margin-bottom: 10px; color: var(--accent); }
+  .card h2, .panel h2 { font-size: 12px; letter-spacing: 1px; margin-bottom: 10px; color: var(--accent); }
+  .swipeRow { display: flex; gap: 16px; align-items: flex-start; }
+  #swipePlot, #rtChart, #mChart { background: #0a0d12; border: 1px solid var(--border); border-radius: 6px; }
+  .mtable { display: grid; grid-template-columns: auto auto; gap: 3px 14px; font-size: 11.5px; align-content: start; min-width: 250px; }
+  .mtable .k { color: var(--muted); }
+  .mtable .v { color: var(--text); text-align: right; }
+  .mtable .v.hot { color: var(--bad); }
+  #gallery { display: flex; flex-wrap: wrap; gap: 6px; min-height: 66px; }
+  #gallery canvas { background: #0a0d12; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+  #gallery canvas.replay { border-color: var(--bad); }
+  #gallery canvas.untrusted { border-color: var(--warn); }
+  #gallery canvas.sel { outline: 1px solid var(--accent); }
+  .charts { display: flex; gap: 16px; }
+  .charts > div { flex: 1; }
+  #log {
+    height: 460px; overflow-y: auto;
+    font-size: 11px; line-height: 1.55;
+    background: #0a0d12; border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 10px; white-space: pre-wrap; word-break: break-word;
+  }
+  #log .info { color: #8792a6; }
+  #log .metric { color: #7ec9ff; }
+  #log .good { color: var(--ok); }
+  #log .warn { color: var(--warn); }
+  #log .flag { color: var(--bad); }
   .verdict {
     display: flex; align-items: center; justify-content: space-between;
     padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;
@@ -86,12 +118,42 @@
 <body>
 <header>
   <h1>LANEGUARD</h1>
-  <p>original driving-game simulation + behavioral anti-cheat &mdash; play it, then let the bots try</p>
+  <p>behavioral anti-cheat test bench &mdash; live input forensics on an original driving-game simulation</p>
+  <span class="clock" id="clock">T+00:00.000</span>
 </header>
 
-<div class="wrap">
-  <canvas id="game" width="400" height="860"></canvas>
+<div class="dash">
+  <div>
+    <canvas id="game" width="400" height="860"></canvas>
+  </div>
 
+  <div>
+    <section class="card">
+      <h2>LIVE SWIPE ANALYSIS &mdash; <span id="swipeTitle">waiting for first swipe</span></h2>
+      <div class="swipeRow">
+        <canvas id="swipePlot" width="500" height="310"></canvas>
+        <div class="mtable" id="swipeMetrics"></div>
+      </div>
+    </section>
+    <section class="card">
+      <h2>RECENT SWIPES <span style="color:var(--muted);letter-spacing:0">(click to inspect &middot; red border = replay match &middot; yellow = synthetic events)</span></h2>
+      <div id="gallery"></div>
+    </section>
+    <section class="card charts">
+      <div>
+        <h2>REACTION-TIME DISTRIBUTION</h2>
+        <canvas id="rtChart" width="350" height="170"></canvas>
+        <div class="detail" id="rtStats"></div>
+      </div>
+      <div>
+        <h2>DODGE-MARGIN DISTRIBUTION</h2>
+        <canvas id="mChart" width="350" height="170"></canvas>
+        <div class="detail" id="mStats"></div>
+      </div>
+    </section>
+  </div>
+
+  <div>
   <div class="panel">
     <h2>ANTI-CHEAT VERDICT</h2>
     <div class="verdict">
@@ -117,6 +179,12 @@
       <input type="checkbox" id="hwInject">
       simulate hardware-level injection (events arrive trusted, like a phone-farm rig)
     </label>
+  </div>
+
+  <section class="card">
+    <h2>EVENT LOG</h2>
+    <div id="log"></div>
+  </section>
   </div>
 </div>
 
@@ -156,18 +224,51 @@ const W = cv.width, H = cv.height;
 const LANES = 4;                 // 0..2 traffic, 3 = cashout
 const CASH_LANE = 3;
 const LANE_PX = 62;              // lane width in px at the player plane
+const ZPX = 14.5;                // px per z unit at the player plane
 const PLAYER_SCREEN_Y = 640;
 const SPAWN_Z = 55;
 const SWIPE_THRESHOLD = 28;
 const THREAT_WINDOW = 1.15;      // s of time-to-impact at which a blocking car becomes a threat
-const PLAYER_HALF_W = 0.34;      // in lane units
-const ANGLED_HALF_W = 0.19;      // hitbox narrows while the car is angled mid-change
-const CAR_HALF_W = 0.36;
-const CAR_HALF_L = 1.3;          // z half-length
-const PLAYER_HALF_L = 1.3;
-const BARRIER_HALF_W = 0.06;
+const MAX_STEER = 0.52;          // ~30° heading during a lane change
+const STEER_RATE = 9;            // how fast the heading eases toward its target
+const HIT_HW = 25;               // hitbox half-width in px (visual car is 29)
+const HIT_HL = 50;               // hitbox half-length in px (visual car is 54)
+const HLZ = HIT_HL / ZPX;        // car half-length in z units (~3.45)
+const COLL_Z = 2 * HLZ;          // bumper-to-bumper center distance
 const CASH_HOLD = 1.6;           // s in the cashout lane to bank the run
 const ENTRY_FEE = 1.00;
+
+function closing(car) { return game.speed * (1 - car.f); } // z/s the gap shrinks
+
+/* Rotated-rectangle collision (SAT) in player-plane px space:
+   lateral = lane * LANE_PX, depth = z * ZPX. The player box rotates with its
+   real heading; obstacles are axis-aligned. */
+function rectHit(pcx, pcz, theta, ocx, ocz, ohw, ohl) {
+  // The player's box is its real rotated rectangle, but it SHRINKS while the
+  // car is angled (matching the real game: an angling car presents a smaller
+  // hitbox, which is what makes threading a lane change possible at 30°).
+  const shrink = 1 - 0.5 * Math.min(1, Math.abs(theta) / 0.35);
+  const hw = HIT_HW * shrink, hl = HIT_HL * shrink;
+  const c = Math.cos(theta), s = Math.sin(theta);
+  const P = [
+    [pcx + hw * c - hl * s, pcz + hw * s + hl * c],
+    [pcx - hw * c - hl * s, pcz - hw * s + hl * c],
+    [pcx - hw * c + hl * s, pcz - hw * s - hl * c],
+    [pcx + hw * c + hl * s, pcz + hw * s - hl * c],
+  ];
+  const O = [
+    [ocx + ohw, ocz + ohl], [ocx - ohw, ocz + ohl],
+    [ocx - ohw, ocz - ohl], [ocx + ohw, ocz - ohl],
+  ];
+  const axes = [[1, 0], [0, 1], [c, s], [-s, c]];
+  for (const ax of axes) {
+    let pMin = 1e18, pMax = -1e18, oMin = 1e18, oMax = -1e18;
+    for (const q of P) { const d = q[0] * ax[0] + q[1] * ax[1]; pMin = Math.min(pMin, d); pMax = Math.max(pMax, d); }
+    for (const q of O) { const d = q[0] * ax[0] + q[1] * ax[1]; oMin = Math.min(oMin, d); oMax = Math.max(oMax, d); }
+    if (pMax < oMin || oMax < pMin) return false;
+  }
+  return true;
+}
 const FONT = "'Luckiest Guy', 'Arial Black', sans-serif";
 
 // road layout in lane units: rainbow shoulder [-1.55,-0.55], lanes 0..3,
@@ -181,9 +282,10 @@ const game = {
   state: "idle",                 // idle | running | dead | cashed
   lane: 1,
   x: 1,
-  cars: [],                      // {lane, z, col}
+  theta: 0,                      // heading (rad); the sprite rotation IS the physics state
+  cars: [],                      // {lane, z, f (forward-speed fraction), col}
   barriers: [],                  // {boundary (0..2), z0, z1}
-  speed: 13,
+  speed: 16,
   dist: 0,
   score: 0,
   deaths: 0,
@@ -209,9 +311,9 @@ function multiplier() { return Math.min(2.5, 1 + game.score * 0.01); }
 
 function resetRun() {
   game.cars = []; game.barriers = []; game.particles = [];
-  game.lane = 1; game.x = 1;
+  game.lane = 1; game.x = 1; game.theta = 0;
   game.lastOpen = 1;
-  game.speed = 13; game.waveGap = 26;
+  game.speed = 16; game.waveGap = 34;
   game.zSinceWave = game.waveGap;
   game.dist = 0; game.score = 0;
   game.cashTimer = 0;
@@ -228,11 +330,19 @@ function spawnWave() {
   const needCross = open !== game.lastOpen ? Math.min(open, game.lastOpen) : -1;
   game.lastOpen = open;
 
+  // each wave drives at its own forward speed (fraction of the player's), with
+  // slight per-car variation; the player is much faster, so passes are quick
+  const fWave = 0.12 + rng() * 0.12;
+  const mkCar = lane => ({
+    lane, z: SPAWN_Z + (rng() - 0.5) * 3,
+    f: Math.max(0.08, Math.min(0.3, fWave + (rng() - 0.5) * 0.04)),
+    col: (rng() * CAR_COLORS.length) | 0, threatAt: 0, rtLogged: false, passed: false,
+  });
   for (let l = 0; l < 3; l++) {
     if (l === open) continue;
-    if (rng() < 0.82) game.cars.push({ lane: l, z: SPAWN_Z + (rng() - 0.5) * 3, col: (rng() * CAR_COLORS.length) | 0, threatAt: 0, rtLogged: false, passed: false });
+    if (rng() < 0.62) game.cars.push(mkCar(l));
   }
-  if (rng() < 0.35) game.cars.push({ lane: CASH_LANE, z: SPAWN_Z + (rng() - 0.5) * 3, col: (rng() * CAR_COLORS.length) | 0, threatAt: 0, rtLogged: false, passed: false });
+  if (rng() < 0.25) game.cars.push(mkCar(CASH_LANE));
 
   // Barrier trap: red blocks on a lane boundary, never on the boundary the
   // guaranteed path needs to cross for this wave.
@@ -248,7 +358,7 @@ function barrierBlocks(fromLane, toLane, zLead) {
   const b = Math.min(fromLane, toLane);
   for (const bar of game.barriers) {
     if (bar.boundary !== b) continue;
-    if (bar.z1 > -PLAYER_HALF_L && bar.z0 < zLead) return true;
+    if (bar.z1 > -HLZ && bar.z0 < zLead) return true;
   }
   return false;
 }
@@ -269,12 +379,12 @@ function laneChange(dir, swipe) {
   if (best) {
     best.rtLogged = true;
     const rt = performance.now() - best.threatAt;
-    AC.recordDodge(rt, best.z / game.speed);
+    AC.recordDodge(rt, Math.max(0.01, (best.z - COLL_Z) / closing(best)));
   }
   // contested move: entering a lane with a car close enough to matter
   for (const car of game.cars) {
     if (car.passed || car.lane !== to) continue;
-    if (car.z > 0.3 && car.z < game.speed * 1.0) { AC.recordRisk(); break; }
+    if (car.z > -COLL_Z && (car.z - COLL_Z) / closing(car) < 1.0) { AC.recordRisk(); break; }
   }
   AC.moves++;
   if (swipe) AC.recordSwipe(swipe);
@@ -331,42 +441,60 @@ function frame(now) {
       spawnWave();
     }
 
-    // lateral movement: car angles toward the target lane, hitbox narrows
+    // steering: the swipe sets a target lane; the car banks to ~30° and its
+    // lateral velocity comes from the heading — it travels the angled path
     const dxLane = game.lane - game.x;
-    const step = 6.2 * dt;
-    if (Math.abs(dxLane) <= step) game.x = game.lane;
-    else game.x += Math.sign(dxLane) * step;
-    const angled = Math.abs(game.lane - game.x) > 0.06;
-    const halfW = angled ? ANGLED_HALF_W : PLAYER_HALF_W;
+    let steerTarget = 0;
+    if (Math.abs(dxLane) > 0.012) {
+      steerTarget = Math.sign(dxLane) * MAX_STEER * Math.min(1, Math.abs(dxLane) / 0.22);
+    }
+    game.theta += (steerTarget - game.theta) * Math.min(1, dt * STEER_RATE);
+    const latSpeed = Math.tan(game.theta) * (game.speed * ZPX) / LANE_PX; // lanes/s
+    game.x += latSpeed * dt;
+    if (Math.abs(game.lane - game.x) < 0.04 && Math.abs(game.theta) < 0.1) {
+      game.x = game.lane;
+      game.theta = 0;
+    }
+    const pcx = game.x * LANE_PX;
 
+    // traffic drives forward at its own speed; a faster follower matches the
+    // car ahead of it instead of rear-ending it
+    for (const a of game.cars) {
+      for (const b of game.cars) {
+        if (a === b || a.lane !== b.lane || a.passed || b.passed) continue;
+        if (b.z > a.z && b.z - a.z < COLL_Z + 1.5 && b.f < a.f) b.f = a.f;
+      }
+    }
     for (const car of game.cars) {
-      car.z -= dz;
+      const cl = closing(car);
+      car.z -= cl * dt;
       if (!car.passed && car.lane === game.lane && !car.threatAt) {
-        const tti = car.z / game.speed;
+        const tti = (car.z - COLL_Z) / cl;
         if (tti > 0 && tti < THREAT_WINDOW) car.threatAt = performance.now();
       }
-      if (!car.passed && car.z < -PLAYER_HALF_L - CAR_HALF_L) {
+      if (!car.passed && car.z < -COLL_Z) {
         car.passed = true;
         game.score++;
         AC.rowsPassed++;
-        game.speed = Math.min(26, game.speed + 0.28);
-        game.waveGap = Math.max(17, game.waveGap - 0.10);
+        game.speed = Math.min(30, game.speed + 0.3);
+        game.waveGap = Math.max(24, game.waveGap - 0.10);
       }
-      if (!car.passed && Math.abs(car.z) < PLAYER_HALF_L + CAR_HALF_L - 0.15 &&
-          Math.abs(car.lane - game.x) < halfW + CAR_HALF_W) {
+      if (!car.passed && Math.abs(car.z) < COLL_Z + 2 &&
+          rectHit(pcx, 0, game.theta, car.lane * LANE_PX, car.z * ZPX, HIT_HW, HIT_HL)) {
         crash();
       }
     }
     for (const bar of game.barriers) {
-      bar.z0 -= dz; bar.z1 -= dz;
-      const bx = bar.boundary + 0.5;
-      if (bar.z1 > -PLAYER_HALF_L && bar.z0 < PLAYER_HALF_L &&
-          Math.abs(bx - game.x) < halfW + BARRIER_HALF_W) {
+      bar.z0 -= dz; bar.z1 -= dz; // rails are parked on the road: full closing speed
+      if (bar.z1 > -HLZ - 1 && bar.z0 < HLZ + 1 &&
+          rectHit(pcx, 0, game.theta,
+                  (bar.boundary + 0.5) * LANE_PX, ((bar.z0 + bar.z1) / 2) * ZPX,
+                  4, ((bar.z1 - bar.z0) / 2) * ZPX)) {
         crash();
       }
     }
-    game.cars = game.cars.filter(c => c.z > -8);
-    game.barriers = game.barriers.filter(b => b.z1 > -8);
+    game.cars = game.cars.filter(c => c.z > -10);
+    game.barriers = game.barriers.filter(b => b.z1 > -10);
 
     // cashout: hold the lane
     if (game.lane === CASH_LANE && Math.abs(game.x - CASH_LANE) < 0.1) {
@@ -521,7 +649,7 @@ function quad(latA, latB, z1, z2, fill) {
 }
 
 function drawRoad() {
-  const Z0 = -4, Z1 = SPAWN_Z + 6;
+  const Z0 = -14, Z1 = SPAWN_Z + 6;
   // curbs
   quad(-1.78, -1.6, Z0, Z1, "#4a463f");
   quad(3.5, 3.68, Z0, Z1, "#54524e");
@@ -535,10 +663,10 @@ function drawRoad() {
   const dashLen = 2.6, gap = 4.6, period = dashLen + gap;
   const off = game.dist % period;
   for (const b of [-0.55, 0.5, 1.5]) {
-    for (let zi = -1; zi < 10; zi++) {
+    for (let zi = -3; zi < 10; zi++) {
       const z = zi * period - off;
-      const za = Math.max(-3, z), zb = z + dashLen;
-      if (zb < -3) continue;
+      const za = Math.max(-14, z), zb = z + dashLen;
+      if (zb < -14) continue;
       quad(b - 0.026, b + 0.026, za, zb, "#f2f2f2");
     }
   }
@@ -567,7 +695,7 @@ function drawCashoutText() {
 
 function drawRainbow() {
   // scrolling hue ramp on the left shoulder, blurred soft like the real thing
-  const zTop = SPAWN_Z + 6, zBot = -4;
+  const zTop = SPAWN_Z + 6, zBot = -14;
   const yBot = screenY(zBot), yTop = screenY(zTop);
   const g = ctx.createLinearGradient(0, yBot, 0, yTop);
   const stops = 26;
@@ -661,7 +789,8 @@ function drawTraffic(c) {
 }
 
 function drawPlayer() {
-  const rot = game.state === "dead" ? 0.5 : Math.max(-1, Math.min(1, (game.lane - game.x) * 2.2)) * 0.16;
+  // the sprite rotation is the actual physics heading
+  const rot = game.state === "dead" ? 0.5 : game.theta;
   drawCarBody(screenX(game.x, 1), PLAYER_SCREEN_Y - 30, 1,
     { body: "#2f8be6", dark: "#2570bd" }, { plate: true, rot });
 }
@@ -957,51 +1086,71 @@ const Bot = {
   },
 
   laneClear(l, threatCar) {
-    if (barrierBlocks(game.lane, l, game.speed * 0.35)) return false;
-    const lead = game.speed * 0.30;
+    if (barrierBlocks(game.lane, l, game.speed * 0.9)) return false;
+    // a rail on EITHER boundary of the destination lane can graze the angled
+    // tail during the settle — treat the lane as unsafe while one is alongside
+    for (const bar of game.barriers) {
+      if (bar.boundary !== l - 1 && bar.boundary !== l) continue;
+      if (bar.z1 > -HLZ - 3 && bar.z0 < HLZ + game.speed * 0.6) return false;
+    }
     for (const car of game.cars) {
       if (car === threatCar || car.passed || car.lane !== l) continue;
-      if (car.z + CAR_HALF_L > -PLAYER_HALF_L && car.z - CAR_HALF_L < lead) return false;
+      const lead = closing(car) * 0.55 + COLL_Z;
+      if (car.z > -COLL_Z - 1 && car.z < lead) return false;
     }
     return true;
   },
 
+  // seconds until this lane's nearest live car reaches the player
+  firstObs(l) {
+    let m = 99;
+    for (const car of game.cars) {
+      if (car.passed || car.lane !== l || car.z <= -COLL_Z) continue;
+      const t = Math.max(0, (car.z - COLL_Z) / closing(car));
+      if (t < m) m = t;
+    }
+    return m;
+  },
+
+  crossOk(from, dir) {
+    return !barrierBlocks(from, from + dir, game.speed * 0.9);
+  },
+
+  /* Utility-based planning: each lane scores by time-to-first-collision, with
+     penalties for the cashout lane and travel distance; a lane only counts if
+     every crossing on the way is barrier-free and every intermediate lane can
+     be passed through right now. Repositions proactively toward open road
+     instead of waiting to be boxed in. */
   safeDir() {
-    let threat = null, next = null;
-    for (const car of game.cars) {
-      if (car.passed || car.z - CAR_HALF_L <= PLAYER_HALF_L) continue;
-      if (car.lane !== game.lane) continue;
-      if (!threat || car.z < threat.z) threat = car;
-    }
-    if (!threat) {
-      if (game.lane === CASH_LANE && this.laneClear(CASH_LANE - 1, null)) return -1;
-      return 0;
-    }
-    for (const car of game.cars) {
-      if (car.passed || car === threat || car.z <= threat.z) continue;
-      if (!next || car.z < next.z) next = car;
-    }
-    const tti = threat.z / game.speed;
-    if (tti > (this.mode === "perfect" ? 0.75 : THREAT_WINDOW)) return 0;
-    const cands = [];
-    for (const dir of [-1, 1]) {
-      const l = game.lane + dir;
-      if (l < 0 || l >= LANES) continue;
-      if (!this.laneClear(l, threat)) continue;
-      let carInL = false;
-      for (const car of game.cars) {
-        if (!car.passed && car.lane === l && Math.abs(car.z - threat.z) < 4) { carInL = true; break; }
+    const here = game.lane;
+    const tHere = this.firstObs(here);
+    const clamp = t => Math.min(t, 4);
+    // survival overrides preference: when a hit is imminent, the cashout-lane
+    // penalty vanishes and any better lane wins
+    const dying = tHere < 0.7;
+    const cashPen = dying ? 0 : 1.2;
+    const margin = dying ? 0.05 : 0.6;
+    let best = here, bestU = clamp(tHere) - (here === CASH_LANE ? cashPen : 0);
+    for (let l = 0; l < LANES; l++) {
+      if (l === here) continue;
+      const dir = Math.sign(l - here);
+      let ok = true;
+      for (let m = here; m !== l; m += dir) {
+        if (!this.crossOk(m, dir)) { ok = false; break; }
+        const step = m + dir;
+        if (step !== l && this.firstObs(step) < 0.9) { ok = false; break; }
       }
-      if (carInL) continue;
-      cands.push({ dir, future: (next && next.lane === l ? 1 : 0) + (l === CASH_LANE ? 1 : 0) });
+      if (!ok || !this.laneClear(l, null)) continue;
+      const u = clamp(this.firstObs(l)) - (l === CASH_LANE ? cashPen : 0) - 0.35 * Math.abs(l - here);
+      if (u > bestU + margin) { best = l; bestU = u; }
     }
-    if (cands.length) {
-      cands.sort((a, b) => a.future - b.future);
-      if (cands.length === 2 && cands[0].future === cands[1].future)
-        return this.rand() < 0.5 ? cands[0].dir : cands[1].dir;
-      return cands[0].dir;
+    if (best === here) return 0;
+    const urgent = tHere < (this.mode === "perfect" ? 0.95 : THREAT_WINDOW);
+    if (!urgent) {
+      if (game.x !== game.lane) return 0;                        // settle first
+      if (tHere > 2.2 && bestU - clamp(tHere) < 1.0) return 0;   // reposition only for real gains
     }
-    return 0; // boxed in: wait for near traffic to pass, retry next tick
+    return Math.sign(best - here);
   },
 
   tick(now) {
@@ -1083,6 +1232,242 @@ const Bot = {
 };
 Bot.buildCorpus();
 
+/* ============================ TEST BENCH ============================
+   Live forensics view: every swipe is plotted and measured the moment it
+   lands, distributions update per dodge, and everything of interest goes
+   to the timestamped event log. Display only — the detector (AC below)
+   never reads anything from here. */
+const Dash = {
+  seq: 0,
+  t0: performance.now(),
+  lastFlagSet: new Set(),
+  lastBadge: "",
+  selected: null,
+  elLog: document.getElementById("log"),
+  elGallery: document.getElementById("gallery"),
+
+  clock() {
+    const s = (performance.now() - this.t0) / 1000;
+    const m = Math.floor(s / 60);
+    return "T+" + String(m).padStart(2, "0") + ":" + (s % 60).toFixed(3).padStart(6, "0");
+  },
+
+  log(msg, cls) {
+    const d = document.createElement("div");
+    d.className = cls || "info";
+    d.textContent = "[" + this.clock() + "] " + msg;
+    this.elLog.appendChild(d);
+    while (this.elLog.childElementCount > 600) this.elLog.removeChild(this.elLog.firstChild);
+    this.elLog.scrollTop = this.elLog.scrollHeight;
+  },
+
+  reset() {
+    this.elGallery.innerHTML = "";
+    this.lastFlagSet = new Set();
+    this.selected = null;
+    document.getElementById("swipeTitle").textContent = "waiting for first swipe";
+    document.getElementById("swipeMetrics").innerHTML = "";
+    const c = document.getElementById("swipePlot");
+    c.getContext("2d").clearRect(0, 0, c.width, c.height);
+    this.drawCharts();
+    this.log("TELEMETRY RESET — all detector state and charts cleared", "warn");
+  },
+
+  onSwipe(f) {
+    f.seq = ++this.seq;
+    // nearest neighbor among the session's other swipes (shape space)
+    let nn = null;
+    for (const o of AC.swipes) {
+      if (o === f) continue;
+      const sd = AC.shapeDist(f.res, o.res);
+      if (!nn || sd < nn.sd) nn = { sd, pd: AC.profileDist(f.profile, o.profile), seq: o.seq };
+    }
+    f.nn = nn;
+    f.replayMatch = !!(nn && nn.sd < 0.015 && nn.pd < 0.30);
+    this.renderSwipe(f);
+    this.addThumb(f);
+    const dir = f.pts[f.pts.length - 1].x >= f.pts[0].x ? "R" : "L";
+    this.log(
+      "SWIPE #" + f.seq + " dir=" + dir +
+      " dur=" + f.dur.toFixed(0) + "ms pts=" + f.pts.length +
+      " len=" + f.len.toFixed(0) + "px jitter=" + f.jitter.toFixed(2) + "px" +
+      " white=" + (Number.isNaN(f.white) ? "n/a" : f.white.toFixed(2)) +
+      " peakT=" + f.peakT.toFixed(2) +
+      (nn ? " nnShape=" + nn.sd.toFixed(4) + "(#" + nn.seq + ")" : "") +
+      (f.trusted ? "" : " [SYNTHETIC-EVENTS]") +
+      (f.replayMatch ? " ** REPLAY-MATCH vs #" + nn.seq + " **" : ""),
+      f.replayMatch ? "flag" : (f.trusted ? "metric" : "warn"));
+  },
+
+  renderSwipe(f) {
+    this.selected = f;
+    for (const el of this.elGallery.children) el.classList.toggle("sel", el.__f === f);
+    document.getElementById("swipeTitle").textContent =
+      "swipe #" + f.seq + (f.replayMatch ? "  ⚑ REPLAY MATCH" : "");
+    const c = document.getElementById("swipePlot"), g = c.getContext("2d");
+    const Wc = c.width, Hc = c.height;
+    g.clearRect(0, 0, Wc, Hc);
+    // grid
+    g.strokeStyle = "rgba(135,146,166,0.10)";
+    g.lineWidth = 1;
+    for (let x = 0; x < Wc; x += 40) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, Hc); g.stroke(); }
+    for (let y = 0; y < Hc; y += 40) { g.beginPath(); g.moveTo(0, y); g.lineTo(Wc, y); g.stroke(); }
+
+    const pathH = Hc - 88;
+    const pts = f.pts;
+    let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+    for (const p of pts) {
+      minx = Math.min(minx, p.x); maxx = Math.max(maxx, p.x);
+      miny = Math.min(miny, p.y); maxy = Math.max(maxy, p.y);
+    }
+    const spanx = Math.max(20, maxx - minx), spany = Math.max(20, maxy - miny);
+    const sc = Math.min((Wc - 70) / spanx, (pathH - 50) / spany);
+    const ox = (Wc - spanx * sc) / 2 - minx * sc;
+    const oy = (pathH - spany * sc) / 2 - miny * sc + 14;
+    const X = p => p.x * sc + ox, Y = p => p.y * sc + oy;
+
+    // segments colored by instantaneous speed
+    let vmax = 1e-9;
+    const vs = [];
+    for (let i = 1; i < pts.length; i++) {
+      const dt = pts[i].t - pts[i - 1].t || 1;
+      const v = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y) / dt;
+      vs.push(v); vmax = Math.max(vmax, v);
+    }
+    g.lineWidth = 3;
+    g.lineCap = "round";
+    for (let i = 1; i < pts.length; i++) {
+      const u = vs[i - 1] / vmax;
+      g.strokeStyle = "hsl(" + (210 - 210 * u) + ",90%,60%)";
+      g.beginPath(); g.moveTo(X(pts[i - 1]), Y(pts[i - 1])); g.lineTo(X(pts[i]), Y(pts[i])); g.stroke();
+    }
+    // sample points
+    g.fillStyle = "rgba(255,255,255,0.85)";
+    for (const p of pts) { g.beginPath(); g.arc(X(p), Y(p), 2.4, 0, Math.PI * 2); g.fill(); }
+    // start / end markers
+    g.strokeStyle = "#3ecf8e"; g.lineWidth = 2;
+    g.beginPath(); g.arc(X(pts[0]), Y(pts[0]), 6, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = "#f4544c";
+    g.beginPath(); g.arc(X(pts[pts.length - 1]), Y(pts[pts.length - 1]), 6, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = "#8792a6";
+    g.font = "10px ui-monospace, monospace";
+    g.textAlign = "left";
+    g.fillText("path (screen px) — segment color = speed (blue slow → red fast)", 10, 12);
+
+    // velocity profile strip
+    const vy0 = Hc - 66, vh = 48;
+    g.fillText("velocity profile (16 samples, normalized)", 10, vy0 - 5);
+    const bw = (Wc - 20) / f.profile.length;
+    const pmax = Math.max(...f.profile, 1e-9);
+    for (let i = 0; i < f.profile.length; i++) {
+      const h = (f.profile[i] / pmax) * vh;
+      g.fillStyle = "hsl(" + (210 - 210 * (f.profile[i] / pmax)) + ",90%,58%)";
+      g.fillRect(10 + i * bw, vy0 + vh - h, bw - 2, h);
+    }
+
+    // metrics table
+    const nn = f.nn;
+    const rows = [
+      ["duration", f.dur.toFixed(0) + " ms"],
+      ["sample points", f.pts.length],
+      ["path length", f.len.toFixed(1) + " px"],
+      ["jitter (motor noise)", f.jitter.toFixed(3) + " px", f.jitter < 0.30],
+      ["Δ⁴/Δ² whiteness", Number.isNaN(f.white) ? "n/a" : f.white.toFixed(2), f.white >= 2.0 && f.wamp >= 0.4],
+      ["implied noise σ", f.wamp.toFixed(2) + " px"],
+      ["velocity peak position", f.peakT.toFixed(3)],
+      ["integer-coord fraction", (f.intFrac * 100).toFixed(0) + " %"],
+      ["event provenance", f.trusted ? "trusted" : "SYNTHETIC", !f.trusted],
+      ["nn shape dist", nn ? nn.sd.toFixed(4) + "  (vs #" + nn.seq + ")" : "—", f.replayMatch],
+      ["nn profile dist", nn ? nn.pd.toFixed(3) : "—"],
+      ["classification", f.replayMatch ? "REPLAY MATCH" : "no duplicate", f.replayMatch],
+    ];
+    document.getElementById("swipeMetrics").innerHTML = rows.map(r =>
+      `<span class="k">${r[0]}</span><span class="v${r[2] ? " hot" : ""}">${r[1]}</span>`).join("");
+  },
+
+  addThumb(f) {
+    const t = document.createElement("canvas");
+    t.width = 92; t.height = 62;
+    t.title = "swipe #" + f.seq;
+    if (f.replayMatch) t.className = "replay";
+    else if (!f.trusted) t.className = "untrusted";
+    const g = t.getContext("2d");
+    const pts = f.pts;
+    let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+    for (const p of pts) {
+      minx = Math.min(minx, p.x); maxx = Math.max(maxx, p.x);
+      miny = Math.min(miny, p.y); maxy = Math.max(maxy, p.y);
+    }
+    const sc = Math.min(76 / Math.max(20, maxx - minx), 40 / Math.max(20, maxy - miny));
+    const ox = (92 - (maxx - minx) * sc) / 2 - minx * sc;
+    const oy = (54 - (maxy - miny) * sc) / 2 - miny * sc;
+    g.strokeStyle = f.replayMatch ? "#f4544c" : f.trusted ? "#7ec9ff" : "#f5b942";
+    g.lineWidth = 1.6;
+    g.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const x = pts[i].x * sc + ox, y = pts[i].y * sc + oy;
+      i ? g.lineTo(x, y) : g.moveTo(x, y);
+    }
+    g.stroke();
+    g.fillStyle = "#8792a6";
+    g.font = "9px ui-monospace, monospace";
+    g.fillText("#" + f.seq + " " + f.dur.toFixed(0) + "ms", 4, 58);
+    t.__f = f;
+    t.onclick = () => this.renderSwipe(f);
+    this.elGallery.appendChild(t);
+    while (this.elGallery.childElementCount > 24) this.elGallery.removeChild(this.elGallery.firstChild);
+  },
+
+  onDodge(rt, margin) {
+    this.drawCharts();
+    this.log("dodge: RT " + rt.toFixed(0) + "ms · margin " + margin.toFixed(2) + "s · game speed " + game.speed.toFixed(1), "metric");
+  },
+
+  hist(canvasId, values, lo, hi, bins, unit, statsId, statsFn) {
+    const c = document.getElementById(canvasId), g = c.getContext("2d");
+    g.clearRect(0, 0, c.width, c.height);
+    g.strokeStyle = "rgba(135,146,166,0.12)";
+    for (let y = 0; y < c.height; y += 30) { g.beginPath(); g.moveTo(0, y); g.lineTo(c.width, y); g.stroke(); }
+    g.fillStyle = "#8792a6";
+    g.font = "10px ui-monospace, monospace";
+    g.textAlign = "left"; g.fillText(lo + unit, 4, c.height - 4);
+    g.textAlign = "right"; g.fillText(hi + unit, c.width - 4, c.height - 4);
+    if (!values.length) {
+      g.textAlign = "center"; g.fillText("no samples yet", c.width / 2, c.height / 2);
+      document.getElementById(statsId).textContent = "n 0";
+      return;
+    }
+    const counts = new Array(bins).fill(0);
+    for (const v of values) {
+      const b = Math.max(0, Math.min(bins - 1, Math.floor(((v - lo) / (hi - lo)) * bins)));
+      counts[b]++;
+    }
+    const cmax = Math.max(...counts);
+    const bw = (c.width - 8) / bins;
+    for (let i = 0; i < bins; i++) {
+      const h = (counts[i] / cmax) * (c.height - 34);
+      g.fillStyle = "#4da3ff";
+      g.fillRect(4 + i * bw, c.height - 16 - h, bw - 1.5, h);
+    }
+    document.getElementById(statsId).textContent = statsFn(values);
+  },
+
+  drawCharts() {
+    this.hist("rtChart", AC.rts, 0, 800, 28, "ms", "rtStats", v => {
+      const st = AC.stats(v);
+      const sk = v.length >= 8 ? AC.skewness(v) : NaN;
+      return "n " + v.length + " · mean " + st.mean.toFixed(0) + "ms · sd " + st.sd.toFixed(0) +
+        " · cv " + st.cv.toFixed(2) + " · min " + st.min.toFixed(0) +
+        (Number.isNaN(sk) ? "" : " · skew " + sk.toFixed(2) + (sk < 0.15 ? " (no lapse tail)" : ""));
+    });
+    this.hist("mChart", AC.margins, 0, 1.2, 24, "s", "mStats", v => {
+      const st = AC.stats(v);
+      return "n " + v.length + " · mean " + st.mean.toFixed(2) + "s · cv " + st.cv.toFixed(2) +
+        (st.cv < 0.22 && v.length >= 8 ? " (metronome-consistent)" : "");
+    });
+  },
+};
+
 /* =========================== ANTI-CHEAT ===========================
    Pure behavioral analysis over the input/telemetry stream. It has no
    knowledge of Bot.mode. Signals:
@@ -1106,8 +1491,10 @@ const AC = {
     this.keyboardOnly = false;
     if (!s.trusted) this.untrustedSeen = true;
     if (s.points.length >= 5 && s.dur > 30) {
-      this.swipes.push(this.featurize(s));
+      const f = this.featurize(s);
+      this.swipes.push(f);
       if (this.swipes.length > 80) this.swipes.shift();
+      Dash.onSwipe(f);
     }
   },
   recordKey(trusted) { if (!trusted) this.untrustedSeen = true; },
@@ -1117,20 +1504,39 @@ const AC = {
     if (margin > 0) this.margins.push(margin);
     if (this.rts.length > 120) this.rts.shift();
     if (this.margins.length > 120) this.margins.shift();
+    Dash.onDodge(rt, margin);
   },
-  recordAbort() { this.aborts++; },
-  recordRisk() { this.pendingRisks.push({ at: performance.now() }); },
-  recordRunEnd(kind) { this.runEnds.push(kind); },
+  recordAbort() {
+    this.aborts++;
+    Dash.log("gesture aborted — touch released with no lane change committed (" + this.aborts + " total)", "info");
+  },
+  recordRisk() {
+    this.pendingRisks.push({ at: performance.now() });
+    Dash.log("CONTESTED move — entered a lane with live traffic inside the threat window", "warn");
+  },
+  recordRunEnd(kind) {
+    this.runEnds.push(kind);
+    if (kind === "crash") {
+      Dash.log("RUN END: CRASH at score " + game.score + " — payout $" + (ENTRY_FEE * multiplier()).toFixed(2) + " forfeited", "flag");
+    } else {
+      Dash.log("RUN END: CASHOUT — banked $" + game.banked.toFixed(2) + " at " + multiplier().toFixed(2) + "x (score " + game.score + ")", "good");
+    }
+  },
   recordDeath() {
     this.deaths++;
     const now = performance.now();
-    for (const r of this.pendingRisks) this.risks.push(now - r.at > 1400);
+    for (const r of this.pendingRisks) {
+      const fatal = now - r.at <= 1400;
+      this.risks.push(!fatal);
+      Dash.log("contested move resolved: " + (fatal ? "FATAL (crash within 1.4s)" : "survived"), fatal ? "warn" : "info");
+    }
     this.pendingRisks = [];
   },
   tickRisks(now) {
     while (this.pendingRisks.length && now - this.pendingRisks[0].at > 1400) {
       this.pendingRisks.shift();
       this.risks.push(true);
+      Dash.log("contested move resolved: survived (" + this.risks.filter(Boolean).length + "/" + this.risks.length + " survive rate)", "info");
     }
   },
 
@@ -1179,7 +1585,10 @@ const AC = {
       white = e4 / (e2 + 1e-9);
       wamp = e4 / (2 * Math.sqrt(70)); // implied per-point noise sigma in px
     }
-    return { res, profile, white, wamp, jitter, peakT, dur: s.dur, trusted: s.trusted, intFrac: ints / pts.length };
+    let len = 0;
+    for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    return { res, profile, white, wamp, jitter, peakT, len, pts,
+             dur: s.dur, trusted: s.trusted, intFrac: ints / pts.length };
   },
 
   speedProfile(pts, n) {
@@ -1365,14 +1774,14 @@ const AC = {
     // and actually bank runs. Lookahead-verified play never risks anything,
     // and when a bot injects "errors" they are always survivable.
     {
-      const ready = this.moves >= 20;
-      let sus = 0, detail = "need " + Math.max(0, 20 - this.moves) + " more moves";
+      const ready = this.moves >= 14;
+      let sus = 0, detail = "need " + Math.max(0, 14 - this.moves) + " more moves";
       if (ready) {
         sus = 0;
         const parts = [];
-        if (this.aborts === 0 && this.moves >= 20) { sus += 0.25; parts.push("0 aborted gestures"); }
+        if (this.aborts === 0 && this.moves >= 14) { sus += 0.25; parts.push("0 aborted gestures"); }
         else parts.push(this.aborts + " aborted gestures");
-        if (this.risks.length === 0 && this.moves >= 20) {
+        if (this.risks.length === 0 && this.moves >= 14) {
           sus += 0.45;
           flags.push("never enters contested space across " + this.moves + " moves (lookahead-verified play)");
           parts.push("0 contested moves");
@@ -1455,6 +1864,18 @@ function renderPanel() {
   else if (r.overall < 0.58) { elBadge.textContent = "SUSPECT"; elBadge.className = "badge suspect"; }
   else { elBadge.textContent = "BOT"; elBadge.className = "badge bot"; }
 
+  // stream verdict + flag transitions to the event log
+  document.getElementById("clock").textContent = Dash.clock() + (Bot.mode ? "  ·  mode: bot:" + Bot.mode : "  ·  mode: human");
+  for (const f of r.flags) {
+    if (!Dash.lastFlagSet.has(f)) Dash.log("FLAG RAISED: " + f, "flag");
+  }
+  Dash.lastFlagSet = new Set(r.flags);
+  if (r.ready && elBadge.textContent !== Dash.lastBadge) {
+    Dash.lastBadge = elBadge.textContent;
+    Dash.log("VERDICT → " + elBadge.textContent + " (confidence " + (r.overall * 100).toFixed(0) + "%)",
+      elBadge.textContent === "BOT" ? "flag" : elBadge.textContent === "SUSPECT" ? "warn" : "good");
+  }
+
   elSignals.innerHTML = r.signals.map(s => {
     const pct = Math.round(s.sus * 100);
     const color = !s.ready ? "#3a465e" : s.sus < 0.33 ? "var(--ok)" : s.sus < 0.6 ? "var(--warn)" : "var(--bad)";
@@ -1472,12 +1893,17 @@ function renderPanel() {
 }
 setInterval(renderPanel, 400);
 
-document.getElementById("btnHuman").onclick = () => Bot.set(null);
-document.getElementById("btnPerfect").onclick = () => { AC.reset(); Bot.set("perfect"); };
-document.getElementById("btnMirror").onclick = () => { AC.reset(); Bot.set("mirror"); };
-document.getElementById("btnGen").onclick = () => { AC.reset(); Bot.set("generative"); };
-document.getElementById("btnReset").onclick = () => { AC.reset(); };
+document.getElementById("btnHuman").onclick = () => { Bot.set(null); Dash.log("MODE → human control", "good"); };
+document.getElementById("btnPerfect").onclick = () => { AC.reset(); Dash.reset(); Bot.set("perfect"); Dash.log("MODE → bot:perfect (scripted play, machine-clean swipes)", "warn"); };
+document.getElementById("btnMirror").onclick = () => { AC.reset(); Dash.reset(); Bot.set("mirror"); Dash.log("MODE → bot:mirror (perturbed replay of recorded human traces)", "warn"); };
+document.getElementById("btnGen").onclick = () => { AC.reset(); Dash.reset(); Bot.set("generative"); Dash.log("MODE → bot:generative (fresh synthetic trace per swipe)", "warn"); };
+document.getElementById("btnReset").onclick = () => { AC.reset(); Dash.reset(); };
+document.getElementById("hwInject").onchange = e =>
+  Dash.log("hardware-level injection simulation " + (e.target.checked ? "ON — bot events will arrive trusted" : "OFF — bot events arrive isTrusted=false"), "warn");
 
+Dash.drawCharts();
+Dash.log("LaneGuard test bench up — detector armed, session clock started", "good");
+Dash.log("game: original Drive-style simulation · detector: 7 behavioral signals, thresholds are uncalibrated priors pending a human swipe corpus", "info");
 requestAnimationFrame(frame);
 </script>
 </body>
