@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>LaneGuard — behavioral anti-cheat demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0b0e13;
@@ -30,11 +33,10 @@
   header { text-align: center; margin-bottom: 12px; }
   header h1 { font-size: 18px; letter-spacing: 2px; }
   header p { color: var(--muted); font-size: 12px; margin-top: 4px; }
-  .wrap { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+  .wrap { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
   canvas {
-    background: #10141c;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 24px;
     touch-action: none;
     display: block;
   }
@@ -88,7 +90,7 @@
 </header>
 
 <div class="wrap">
-  <canvas id="game" width="420" height="640"></canvas>
+  <canvas id="game" width="400" height="860"></canvas>
 
   <div class="panel">
     <h2>ANTI-CHEAT VERDICT</h2>
@@ -119,11 +121,10 @@
 </div>
 
 <footer>
-  Swipe / drag on the road or use &larr; &rarr; keys. Hold the green lane to cash out; a crash
-  forfeits the payout, which climbs to 2.5x with distance. The game is an original simulation
-  (no third-party code or assets). The two bot modes reproduce the real attack classes against
-  skill-money games: scripted perfect play, and replay of perturbed human swipe recordings.
-  The detector never sees which mode is running &mdash; it judges behavior only.
+  Tap to start, swipe / drag or use &larr; &rarr; keys to change lanes. Hold the cashout lane
+  to bank the run; a crash forfeits the payout, which climbs to 2.5x with distance. The game is
+  an original simulation (no third-party code or assets). The bot modes reproduce the real
+  attack classes against skill-money games; the detector never sees which mode is running.
 </footer>
 
 <script>
@@ -146,17 +147,17 @@ const rng = mulberry32(1337);
 
 /* ====================== WORLD / PROJECTION ======================
    World space: lateral position in lane units (lane centers at 0,1,2,3;
-   lane 3 is the cash-out lane), depth z in road units ahead of the car.
-   Third-person camera: everything projects toward a horizon point. */
+   lane 3 is the cashout lane), depth z in road units ahead of the car.
+   Camera: near-top-down with mild convergence — the road runs off the top
+   of the screen, no horizon. */
 const cv = document.getElementById("game");
 const ctx = cv.getContext("2d");
 const W = cv.width, H = cv.height;
-const LANES = 4;                 // 0..2 traffic, 3 = cash-out
+const LANES = 4;                 // 0..2 traffic, 3 = cashout
 const CASH_LANE = 3;
-const HORIZON_Y = 150;
-const PLAYER_SCREEN_Y = 552;
-const LANE_PX = 82;              // lane width in px at the player plane
-const SPAWN_Z = 46;
+const LANE_PX = 62;              // lane width in px at the player plane
+const PLAYER_SCREEN_Y = 640;
+const SPAWN_Z = 55;
 const SWIPE_THRESHOLD = 28;
 const THREAT_WINDOW = 1.15;      // s of time-to-impact at which a blocking car becomes a threat
 const PLAYER_HALF_W = 0.34;      // in lane units
@@ -165,38 +166,49 @@ const CAR_HALF_W = 0.36;
 const CAR_HALF_L = 1.3;          // z half-length
 const PLAYER_HALF_L = 1.3;
 const BARRIER_HALF_W = 0.06;
-const CASH_HOLD = 1.6;           // s in the cash-out lane to bank the run
+const CASH_HOLD = 1.6;           // s in the cashout lane to bank the run
 const ENTRY_FEE = 1.00;
+const FONT = "'Luckiest Guy', 'Arial Black', sans-serif";
 
-function proj(z) { return 1 / (1 + z * 0.11); }          // 1 at player plane -> ~0.16 at horizon
-function screenY(p) { return HORIZON_Y + (PLAYER_SCREEN_Y - HORIZON_Y) * ((p - 0.16) / 0.84); }
-function screenX(lat, p) { return W / 2 + (lat - 1.5) * LANE_PX * p; }
+// road layout in lane units: rainbow shoulder [-1.55,-0.55], lanes 0..3,
+// green cashout boundary at 2.5, road edges -1.6 and 3.5
+function proj(z) { return 1 / (1 + z * 0.006); }
+function screenY(z) { return PLAYER_SCREEN_Y - 14.5 * z / (1 + 0.004 * z); }
+function screenX(lat, p) { return W / 2 + (lat - 0.95) * LANE_PX * p; }
 
 /* ============================== GAME ============================== */
 const game = {
   state: "idle",                 // idle | running | dead | cashed
-  lane: 1,                       // committed target lane
-  x: 1,                          // continuous lateral position (lane units)
-  cars: [],                      // {lane, z}  z = center depth, decreasing
-  barriers: [],                  // {boundary (0..2 = between b and b+1), z0, z1}
-  speed: 13,                     // z units / s
+  lane: 1,
+  x: 1,
+  cars: [],                      // {lane, z, col}
+  barriers: [],                  // {boundary (0..2), z0, z1}
+  speed: 13,
   dist: 0,
   score: 0,
   deaths: 0,
   lastOpen: 1,
   waveGap: 26,
   zSinceWave: 0,
-  scroll: 0,
   stateAt: 0,
-  flash: 0,
   cashTimer: 0,
   banked: 0,
+  bankedTotal: 0,
+  tilt: 0,
+  particles: [],
 };
 
-function multiplier() { return Math.min(2.5, 1 + game.score * 0.02); }
+const CAR_COLORS = [
+  { body: "#e8e8e8", dark: "#b9b9bd" },  // white
+  { body: "#e9c832", dark: "#bb9c1e" },  // yellow
+  { body: "#d1483c", dark: "#a3352c" },  // red
+  { body: "#e8e8e8", dark: "#b9b9bd" },
+];
+
+function multiplier() { return Math.min(2.5, 1 + game.score * 0.01); }
 
 function resetRun() {
-  game.cars = []; game.barriers = [];
+  game.cars = []; game.barriers = []; game.particles = [];
   game.lane = 1; game.x = 1;
   game.lastOpen = 1;
   game.speed = 13; game.waveGap = 26;
@@ -208,7 +220,7 @@ function resetRun() {
 
 function spawnWave() {
   // The open traffic lane walks by at most one step, so a correct dodge is
-  // always reachable. Lane 3 (cash-out) gets its own occasional traffic.
+  // always reachable. Lane 3 (cashout) gets its own occasional traffic.
   const r = rng();
   let open = game.lastOpen;
   if (r < 0.36) open = Math.max(0, open - 1);
@@ -218,12 +230,12 @@ function spawnWave() {
 
   for (let l = 0; l < 3; l++) {
     if (l === open) continue;
-    if (l !== open && rng() < 0.82) game.cars.push({ lane: l, z: SPAWN_Z + (rng() - 0.5) * 3, threatAt: 0, rtLogged: false, passed: false });
+    if (rng() < 0.82) game.cars.push({ lane: l, z: SPAWN_Z + (rng() - 0.5) * 3, col: (rng() * CAR_COLORS.length) | 0, threatAt: 0, rtLogged: false, passed: false });
   }
-  if (rng() < 0.35) game.cars.push({ lane: CASH_LANE, z: SPAWN_Z + (rng() - 0.5) * 3, threatAt: 0, rtLogged: false, passed: false });
+  if (rng() < 0.35) game.cars.push({ lane: CASH_LANE, z: SPAWN_Z + (rng() - 0.5) * 3, col: (rng() * CAR_COLORS.length) | 0, threatAt: 0, rtLogged: false, passed: false });
 
-  // Barrier trap: a stationary rail on a lane boundary, never on the boundary
-  // the guaranteed path needs to cross for this wave.
+  // Barrier trap: red blocks on a lane boundary, never on the boundary the
+  // guaranteed path needs to cross for this wave.
   if (rng() < 0.34) {
     const options = [0, 1, 2].filter(b => b !== needCross);
     const b = options[(rng() * options.length) | 0];
@@ -268,13 +280,41 @@ function laneChange(dir, swipe) {
   if (swipe) AC.recordSwipe(swipe);
 }
 
+const puffRand = mulberry32(0xf1a2);
+function emitPuff(kind) {
+  const r = puffRand;
+  const px = screenX(game.x, 1), py = PLAYER_SCREEN_Y - 42;
+  if (kind === "smoke") {
+    game.particles.push({
+      x: px + (r() - 0.5) * 56, y: py - 24 - r() * 40,
+      vx: (r() - 0.5) * 14, vy: -48 - r() * 50,
+      r: 15 + r() * 16, grow: 9, age: 0, life: 1.9 + r() * 1.1, kind,
+    });
+  } else if (kind === "ember") {
+    game.particles.push({
+      x: px + (r() - 0.5) * 48, y: py - 6 - r() * 26,
+      vx: (r() - 0.5) * 12, vy: -36 - r() * 36,
+      r: 12 + r() * 12, grow: 6, age: 0, life: 1.3 + r() * 0.8, kind,
+    });
+  } else {
+    game.particles.push({
+      x: px + (r() - 0.5) * 34, y: py + 8 - r() * 20,
+      vx: (r() - 0.5) * 10, vy: -22 - r() * 30,
+      r: 10 + r() * 12, grow: 4, age: 0, life: 0.7 + r() * 0.5, kind: "fire",
+    });
+  }
+}
+
 function crash() {
   game.state = "dead";
   game.stateAt = performance.now();
-  game.flash = 1;
   game.deaths++;
+  game.emitAcc = 0;
   AC.recordDeath();
   AC.recordRunEnd("crash");
+  for (let i = 0; i < 14; i++) emitPuff("smoke");
+  for (let i = 0; i < 8; i++) emitPuff("ember");
+  for (let i = 0; i < 8; i++) emitPuff("fire");
 }
 
 let lastFrame = performance.now();
@@ -284,7 +324,6 @@ function frame(now) {
 
   if (game.state === "running") {
     const dz = game.speed * dt;
-    game.scroll = (game.scroll + dz) % 4;
     game.dist += dz;
     game.zSinceWave += dz;
     if (game.zSinceWave >= game.waveGap) {
@@ -294,7 +333,7 @@ function frame(now) {
 
     // lateral movement: car angles toward the target lane, hitbox narrows
     const dxLane = game.lane - game.x;
-    const step = 6.2 * dt; // lanes/s
+    const step = 6.2 * dt;
     if (Math.abs(dxLane) <= step) game.x = game.lane;
     else game.x += Math.sign(dxLane) * step;
     const angled = Math.abs(game.lane - game.x) > 0.06;
@@ -302,7 +341,6 @@ function frame(now) {
 
     for (const car of game.cars) {
       car.z -= dz;
-      // threat registration against the committed lane
       if (!car.passed && car.lane === game.lane && !car.threatAt) {
         const tti = car.z / game.speed;
         if (tti > 0 && tti < THREAT_WINDOW) car.threatAt = performance.now();
@@ -314,7 +352,6 @@ function frame(now) {
         game.speed = Math.min(26, game.speed + 0.28);
         game.waveGap = Math.max(17, game.waveGap - 0.10);
       }
-      // collision (continuous lateral position vs car box)
       if (!car.passed && Math.abs(car.z) < PLAYER_HALF_L + CAR_HALF_L - 0.15 &&
           Math.abs(car.lane - game.x) < halfW + CAR_HALF_W) {
         crash();
@@ -322,7 +359,6 @@ function frame(now) {
     }
     for (const bar of game.barriers) {
       bar.z0 -= dz; bar.z1 -= dz;
-      // slamming into a rail while straddling its boundary
       const bx = bar.boundary + 0.5;
       if (bar.z1 > -PLAYER_HALF_L && bar.z0 < PLAYER_HALF_L &&
           Math.abs(bx - game.x) < halfW + BARRIER_HALF_W) {
@@ -332,11 +368,12 @@ function frame(now) {
     game.cars = game.cars.filter(c => c.z > -8);
     game.barriers = game.barriers.filter(b => b.z1 > -8);
 
-    // cash-out: hold the green lane
+    // cashout: hold the lane
     if (game.lane === CASH_LANE && Math.abs(game.x - CASH_LANE) < 0.1) {
       game.cashTimer += dt;
       if (game.cashTimer >= CASH_HOLD) {
         game.banked = ENTRY_FEE * multiplier();
+        game.bankedTotal += game.banked;
         game.state = "cashed";
         game.stateAt = now;
         AC.recordRunEnd("cashout");
@@ -344,185 +381,461 @@ function frame(now) {
     } else {
       game.cashTimer = Math.max(0, game.cashTimer - dt * 2);
     }
-  } else if (game.state === "dead" && now - game.stateAt > 950) {
-    resetRun();
-  } else if (game.state === "cashed" && now - game.stateAt > 1400) {
+  }
+
+  // crash-scene tilt eases in while dead; the plume keeps burning
+  const targetTilt = game.state === "dead" ? -0.17 : 0;
+  game.tilt += (targetTilt - game.tilt) * Math.min(1, dt * 4);
+  if (game.state === "dead") {
+    game.emitAcc = (game.emitAcc || 0) + dt;
+    while (game.emitAcc > 0.11) {
+      game.emitAcc -= 0.11;
+      emitPuff("smoke");
+      if (puffRand() < 0.5) emitPuff("ember");
+      if (puffRand() < 0.9) emitPuff("fire");
+    }
+  }
+
+  // bots continue past end screens on their own; humans tap
+  if ((game.state === "dead" || game.state === "cashed") && Bot.mode && now - game.stateAt > 900) {
     resetRun();
   }
 
   AC.tickRisks(now);
-  draw(now);
+  draw(now, dt);
   Bot.tick(now);
   requestAnimationFrame(frame);
 }
 
 /* ============================== DRAW ============================== */
-function draw(now) {
-  ctx.clearRect(0, 0, W, H);
-  // sky
-  const sky = ctx.createLinearGradient(0, 0, 0, HORIZON_Y);
-  sky.addColorStop(0, "#0d1220"); sky.addColorStop(1, "#1b2438");
-  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, HORIZON_Y);
-  // ground
-  ctx.fillStyle = "#0e1119"; ctx.fillRect(0, HORIZON_Y, W, H - HORIZON_Y);
-
-  // road surface
-  roadPoly(-2.05, 2.05, "#161b26");
-  // cash-out lane tint
-  roadPoly(2.5 - 0.5 + 0.0, 2.05, "rgba(62,207,142,0.10)", 2.5);
-  roadPoly(2.5, 3.55, "rgba(62,207,142,0.10)");
-
-  // lane boundary dashes
-  for (const b of [0, 1, 2]) {
-    const lat = b + 0.5;
-    ctx.strokeStyle = b === 2 ? "rgba(62,207,142,0.5)" : "#2a3347";
-    ctx.lineWidth = 2;
-    for (let z = -(game.scroll % 4); z < SPAWN_Z; z += 4) {
-      const p1 = proj(Math.max(0, z)), p2 = proj(Math.max(0, z + 2.2));
-      if (z + 2.2 < 0) continue;
-      ctx.beginPath();
-      ctx.moveTo(screenX(lat, p1), screenY(p1));
-      ctx.lineTo(screenX(lat, p2), screenY(p2));
-      ctx.stroke();
-    }
+function otext(txt, x, y, size, fill, stroke, strokeW, align) {
+  ctx.font = size + "px " + FONT;
+  ctx.textAlign = align || "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.lineJoin = "round";
+  if (stroke) {
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = strokeW || Math.max(3, size * 0.14);
+    ctx.strokeText(txt, x, y);
   }
-  // road edges
-  for (const lat of [-0.55, 3.55]) {
-    const p1 = proj(0), p2 = proj(SPAWN_Z);
-    ctx.strokeStyle = "#39435c"; ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(screenX(lat, p1), screenY(p1));
-    ctx.lineTo(screenX(lat, p2), screenY(p2));
-    ctx.stroke();
-  }
-
-  // draw far-to-near
-  const items = [];
-  for (const c of game.cars) if (c.z > -6 && c.z < SPAWN_Z) items.push({ z: c.z, t: "car", o: c });
-  for (const b of game.barriers) if (b.z1 > -6 && b.z0 < SPAWN_Z) items.push({ z: b.z1, t: "bar", o: b });
-  items.sort((a, b2) => b2.z - a.z);
-  for (const it of items) it.t === "car" ? drawCar(it.o) : drawBarrier(it.o);
-
-  drawPlayer();
-  drawHUD(now);
+  ctx.fillStyle = fill;
+  ctx.fillText(txt, x, y);
 }
 
-function roadPoly(latA, latB, fill, latBnear) {
-  const pN = proj(0), pF = proj(SPAWN_Z);
+function draw(now, dt) {
+  ctx.save();
+  ctx.clearRect(0, 0, W, H);
+
+  // crash tilt rotates the whole world
+  if (Math.abs(game.tilt) > 0.002) {
+    ctx.translate(W / 2, H * 0.55);
+    ctx.rotate(game.tilt);
+    ctx.scale(1.12, 1.12);
+    ctx.translate(-W / 2, -H * 0.55);
+  }
+
+  drawGround();
+  drawRoad();
+  drawCashoutText();
+  drawRainbow();
+
+  // far-to-near
+  const items = [];
+  for (const c of game.cars) if (c.z > -6 && c.z < SPAWN_Z + 2) items.push({ z: c.z, t: "car", o: c });
+  for (const b of game.barriers) if (b.z1 > -6 && b.z0 < SPAWN_Z + 2) items.push({ z: b.z1, t: "bar", o: b });
+  items.sort((a, b2) => b2.z - a.z);
+  for (const it of items) it.t === "car" ? drawTraffic(it.o) : drawBarrier(it.o);
+
+  drawPlayer();
+  drawParticles(dt);
+  ctx.restore();
+
+  // dim overlays for idle / dead states
+  if (game.state === "idle") {
+    ctx.fillStyle = "rgba(10,10,14,0.52)";
+    ctx.fillRect(0, 0, W, H);
+    drawStartScreen();
+  } else if (game.state === "dead") {
+    ctx.fillStyle = "rgba(10,10,14,0.35)";
+    ctx.fillRect(0, 0, W, H);
+    otext("CRASHED", W / 2, 180, 72, "#ffffff", "#1c1c1c", 12);
+    otext("TAP TO CONTINUE", W / 2, H - 70, 36, "#ffffff", "#1c1c1c", 8);
+  } else if (game.state === "cashed") {
+    ctx.fillStyle = "rgba(10,10,14,0.35)";
+    ctx.fillRect(0, 0, W, H);
+    otext("CASHED OUT", W / 2, 180, 58, "#3ede6a", "#123a1c", 10);
+    otext("$" + game.banked.toFixed(2), W / 2, 250, 54, "#ffffff", "#1c1c1c", 10);
+    otext("TAP TO CONTINUE", W / 2, H - 70, 36, "#ffffff", "#1c1c1c", 8);
+  } else {
+    drawHUD();
+  }
+
+  if (Bot.mode) {
+    ctx.font = "13px ui-monospace, monospace";
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#f5b942";
+    ctx.fillText("BOT: " + Bot.mode, 14, H - 16);
+  }
+
+  // phone notch
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.roundRect(W / 2 - 72, 16, 144, 34, 17);
+  ctx.fill();
+}
+
+function drawGround() {
+  ctx.fillStyle = "#c9bc9e";
+  ctx.fillRect(0, 0, W, H);
+  // scrolling mosaic patches
+  const period = 5;
+  const off = game.dist % period;
+  for (let zi = -1; zi < 13; zi++) {
+    const z = zi * period - off;
+    const zRow = Math.floor((z + game.dist) / period + 0.5);
+    const r = mulberry32(zRow * 7919);
+    const y1 = screenY(Math.max(-3, z)), y2 = screenY(z + period);
+    for (let k = 0; k < 3; k++) {
+      const left = r() < 0.5;
+      const p = proj(Math.max(0, z));
+      const edge = left ? screenX(-1.6, p) : screenX(3.5, p);
+      const gw = 14 + r() * 42;
+      const gx = left ? edge - 12 - r() * 120 - gw : edge + 12 + r() * 120;
+      ctx.fillStyle = r() < 0.5 ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)";
+      ctx.fillRect(gx, Math.min(y1, y2), gw, Math.abs(y1 - y2) * (0.4 + r() * 0.6));
+    }
+  }
+}
+
+function quad(latA, latB, z1, z2, fill) {
+  const pa = proj(Math.max(0, z1)), pb = proj(Math.max(0, z2));
+  const ya = screenY(z1), yb = screenY(z2);
   ctx.fillStyle = fill;
   ctx.beginPath();
-  ctx.moveTo(screenX(latA, pN), screenY(pN));
-  ctx.lineTo(screenX(latA, pF), screenY(pF));
-  ctx.lineTo(screenX(latBnear !== undefined ? latBnear : latB, pF), screenY(pF));
-  ctx.lineTo(screenX(latB, pN), screenY(pN));
+  ctx.moveTo(screenX(latA, pa), ya);
+  ctx.lineTo(screenX(latA, pb), yb);
+  ctx.lineTo(screenX(latB, pb), yb);
+  ctx.lineTo(screenX(latB, pa), ya);
   ctx.closePath();
   ctx.fill();
 }
 
-function drawCar(c) {
-  const p = proj(Math.max(0, c.z));
-  const x = screenX(c.lane, p), y = screenY(p);
-  const w = CAR_HALF_W * 2 * LANE_PX * p, h = 66 * p;
-  ctx.fillStyle = "#5b6b8c";
-  ctx.beginPath(); ctx.roundRect(x - w / 2, y - h, w, h, 6 * p); ctx.fill();
-  ctx.fillStyle = "#3a465e";
-  ctx.fillRect(x - w / 2 + 4 * p, y - h * 0.78, w - 8 * p, h * 0.22);
-  ctx.fillStyle = "#242e42";
-  ctx.fillRect(x - w / 2 + 3 * p, y - h * 0.16, w - 6 * p, h * 0.12);
+function drawRoad() {
+  const Z0 = -4, Z1 = SPAWN_Z + 6;
+  // curbs
+  quad(-1.78, -1.6, Z0, Z1, "#4a463f");
+  quad(3.5, 3.68, Z0, Z1, "#54524e");
+  // asphalt (shoulder through cashout lane)
+  quad(-1.6, 3.5, Z0, Z1, "#6d6f73");
+  // solid white edge line (right)
+  quad(3.44, 3.5, Z0, Z1, "#e8e8e8");
+  // green cashout boundary
+  quad(2.47, 2.53, Z0, Z1, "#2ed94f");
+  // dashed separators: shoulder|0, 0|1, 1|2
+  const dashLen = 2.6, gap = 4.6, period = dashLen + gap;
+  const off = game.dist % period;
+  for (const b of [-0.55, 0.5, 1.5]) {
+    for (let zi = -1; zi < 10; zi++) {
+      const z = zi * period - off;
+      const za = Math.max(-3, z), zb = z + dashLen;
+      if (zb < -3) continue;
+      quad(b - 0.026, b + 0.026, za, zb, "#f2f2f2");
+    }
+  }
+}
+
+function drawCashoutText() {
+  const period = 26;
+  const off = game.dist % period;
+  ctx.fillStyle = "#27e04c";
+  for (let zi = 0; zi < 3; zi++) {
+    const z = zi * period - off + 10;
+    if (z < 1) continue;
+    const p = proj(z);
+    const x = screenX(CASH_LANE, p), y = screenY(z);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-Math.PI / 2);
+    ctx.font = 46 * p + "px " + FONT;
+    ctx.textAlign = "center";
+    ctx.globalAlpha = 0.92;
+    ctx.fillText("CASHOUT", 0, 14 * p);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawRainbow() {
+  // scrolling hue ramp on the left shoulder, blurred soft like the real thing
+  const zTop = SPAWN_Z + 6, zBot = -4;
+  const yBot = screenY(zBot), yTop = screenY(zTop);
+  const g = ctx.createLinearGradient(0, yBot, 0, yTop);
+  const stops = 26;
+  for (let k = 0; k <= stops; k++) {
+    const z = zBot + (zTop - zBot) * (k / stops);
+    const hue = (((z + game.dist) * 5.6) % 360 + 360) % 360;
+    g.addColorStop(k / stops, "hsl(" + hue + ",94%,53%)");
+  }
+  const pa = proj(0), pb = proj(zTop);
+  ctx.save();
+  ctx.filter = "blur(7px)";
+  ctx.globalAlpha = 0.92;
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(screenX(-1.52, pa), yBot);
+  ctx.lineTo(screenX(-1.52, pb), yTop);
+  ctx.lineTo(screenX(-0.68, pb), yTop);
+  ctx.lineTo(screenX(-0.68, pa), yBot);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+/* Cartoon car, seen from above-behind: hood at top, rear (plate) at bottom. */
+function drawCarBody(x, y, p, col, opts) {
+  const w = 58 * p, h = 108 * p;
+  ctx.save();
+  ctx.translate(x, y);
+  if (opts && opts.rot) ctx.rotate(opts.rot);
+  // shadow
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.beginPath();
+  ctx.ellipse(2 * p, 4 * p, w * 0.58, h * 0.52, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // body
+  ctx.fillStyle = col.body;
+  ctx.beginPath();
+  ctx.roundRect(-w / 2, -h / 2, w, h, 10 * p);
+  ctx.fill();
+  // hood shading + vents
+  ctx.fillStyle = col.dark;
+  ctx.beginPath();
+  ctx.roundRect(-w / 2 + 4 * p, -h / 2 + 3 * p, w - 8 * p, h * 0.16, 6 * p);
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  for (let i = -1; i <= 1; i++)
+    ctx.fillRect(i * 9 * p - 4 * p, -h / 2 + 8 * p, 8 * p, 2 * p);
+  // windshield
+  ctx.fillStyle = "#20242c";
+  ctx.beginPath();
+  ctx.moveTo(-w / 2 + 5 * p, -h * 0.24);
+  ctx.lineTo(w / 2 - 5 * p, -h * 0.24);
+  ctx.lineTo(w / 2 - 8 * p, -h * 0.02);
+  ctx.lineTo(-w / 2 + 8 * p, -h * 0.02);
+  ctx.closePath();
+  ctx.fill();
+  // side mirrors
+  ctx.fillStyle = col.body;
+  ctx.fillRect(-w / 2 - 5 * p, -h * 0.22, 6 * p, 5 * p);
+  ctx.fillRect(w / 2 - 1 * p, -h * 0.22, 6 * p, 5 * p);
+  // roof band
+  // rear window
+  ctx.fillStyle = "#20242c";
+  ctx.beginPath();
+  ctx.moveTo(-w / 2 + 8 * p, h * 0.16);
+  ctx.lineTo(w / 2 - 8 * p, h * 0.16);
+  ctx.lineTo(w / 2 - 5 * p, h * 0.34);
+  ctx.lineTo(-w / 2 + 5 * p, h * 0.34);
+  ctx.closePath();
+  ctx.fill();
   // taillights
-  ctx.fillStyle = "#c74b4b";
-  ctx.fillRect(x - w / 2 + 2 * p, y - 6 * p, 8 * p, 4 * p);
-  ctx.fillRect(x + w / 2 - 10 * p, y - 6 * p, 8 * p, 4 * p);
+  ctx.fillStyle = "#f2921e";
+  ctx.fillRect(-w / 2 + 3 * p, h / 2 - 8 * p, 9 * p, 5 * p);
+  ctx.fillRect(w / 2 - 12 * p, h / 2 - 8 * p, 9 * p, 5 * p);
+  // license plate
+  if (opts && opts.plate) {
+    ctx.fillStyle = "#f4f2e8";
+    const pw = 22 * p, ph = 8 * p;
+    ctx.fillRect(-pw / 2, h / 2 - 9.5 * p, pw, ph);
+    ctx.fillStyle = "#333";
+    ctx.font = 6 * p + "px Georgia, serif";
+    ctx.textAlign = "center";
+    ctx.fillText("GBE-86", 0, h / 2 - 3 * p);
+  }
+  ctx.restore();
+}
+
+function drawTraffic(c) {
+  const p = proj(Math.max(0, c.z));
+  drawCarBody(screenX(c.lane, p), screenY(c.z), p, CAR_COLORS[c.col || 0], {});
+}
+
+function drawPlayer() {
+  const rot = game.state === "dead" ? 0.5 : Math.max(-1, Math.min(1, (game.lane - game.x) * 2.2)) * 0.16;
+  drawCarBody(screenX(game.x, 1), PLAYER_SCREEN_Y - 30, 1,
+    { body: "#2f8be6", dark: "#2570bd" }, { plate: true, rot });
 }
 
 function drawBarrier(b) {
+  // discrete red blocks along the boundary
   const lat = b.boundary + 0.5;
-  const z0 = Math.max(0, b.z0), z1 = Math.min(SPAWN_Z, b.z1);
-  if (z1 <= z0) return;
-  const segs = Math.max(2, Math.round((z1 - z0) / 1.6));
-  for (let i = 0; i < segs; i++) {
-    const za = z0 + ((z1 - z0) * i) / segs, zb = z0 + ((z1 - z0) * (i + 1)) / segs;
+  const blockLen = 1.6, gap = 2.4;
+  for (let z = b.z0; z < b.z1; z += blockLen + gap) {
+    const za = Math.max(0.1, z), zb = Math.min(b.z1, z + blockLen);
+    if (zb <= za) continue;
     const pa = proj(za), pb = proj(zb);
-    const h = 18;
-    ctx.fillStyle = i % 2 ? "#d8873b" : "#e8e2d4";
+    const ya = screenY(za), yb = screenY(zb);
+    const hw = 9;
+    const lift = 26; // block height in px
+    // side face
+    ctx.fillStyle = "#7e1410";
     ctx.beginPath();
-    ctx.moveTo(screenX(lat, pa) - 4 * pa, screenY(pa));
-    ctx.lineTo(screenX(lat, pb) - 4 * pb, screenY(pb));
-    ctx.lineTo(screenX(lat, pb) + 4 * pb, screenY(pb) - h * pb);
-    ctx.lineTo(screenX(lat, pa) + 4 * pa, screenY(pa) - h * pa);
+    ctx.moveTo(screenX(lat, pa) - hw * pa, ya);
+    ctx.lineTo(screenX(lat, pb) - hw * pb, yb);
+    ctx.lineTo(screenX(lat, pb) + hw * pb, yb);
+    ctx.lineTo(screenX(lat, pa) + hw * pa, ya);
+    ctx.closePath();
+    ctx.fill();
+    // top face
+    ctx.fillStyle = "#c0201a";
+    ctx.beginPath();
+    ctx.moveTo(screenX(lat, pa) - hw * pa, ya - lift * pa);
+    ctx.lineTo(screenX(lat, pb) - hw * pb, yb - lift * pb);
+    ctx.lineTo(screenX(lat, pb) + hw * pb, yb - lift * pb);
+    ctx.lineTo(screenX(lat, pa) + hw * pa, ya - lift * pa);
+    ctx.closePath();
+    ctx.fill();
+    // front face
+    ctx.fillStyle = "#9c1a15";
+    ctx.beginPath();
+    ctx.moveTo(screenX(lat, pa) - hw * pa, ya - lift * pa);
+    ctx.lineTo(screenX(lat, pa) + hw * pa, ya - lift * pa);
+    ctx.lineTo(screenX(lat, pa) + hw * pa, ya);
+    ctx.lineTo(screenX(lat, pa) - hw * pa, ya);
     ctx.closePath();
     ctx.fill();
   }
 }
 
-function drawPlayer() {
-  const p = 1;
-  const x = screenX(game.x, p), y = PLAYER_SCREEN_Y + 34;
-  const lean = Math.max(-1, Math.min(1, (game.lane - game.x) * 2.2));
-  const w = PLAYER_HALF_W * 2 * LANE_PX, h = 78;
+function drawParticles(dt) {
+  for (const p of game.particles) {
+    p.age += dt;
+    if (p.age < 0) continue;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.r += p.grow * dt;
+    const u = p.age / p.life;
+    if (u >= 1) continue;
+    if (p.kind === "smoke") {
+      const shade = Math.round(40 + u * 26);
+      ctx.fillStyle = "rgba(" + (shade + 12) + "," + shade + "," + shade + "," + (0.5 * (1 - u * 0.75)).toFixed(2) + ")";
+    } else if (p.kind === "ember") {
+      ctx.fillStyle = "rgba(118,36,20," + (0.6 * (1 - u)).toFixed(2) + ")";
+    } else {
+      const g = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, p.r);
+      g.addColorStop(0, "rgba(255,236,120," + (0.95 * (1 - u)) + ")");
+      g.addColorStop(0.5, "rgba(248,142,30," + (0.9 * (1 - u)) + ")");
+      g.addColorStop(1, "rgba(180,50,10,0)");
+      ctx.fillStyle = g;
+    }
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  game.particles = game.particles.filter(p => p.age < p.life);
+}
+
+function drawHUD() {
+  otext("$" + Math.round(game.bankedTotal), W / 2, 150, 66, "#ffffff", "#1c1c1c", 12);
+  otext("SCORE: " + game.score, W / 2, 192, 26, "#ffffff", "#1c1c1c", 6);
+  const m = Math.round(multiplier() * 2) / 2;
+  otext((m % 1 === 0 ? m : m.toFixed(1)) + "X", W / 2, 250, 54, "#3c3f45", "#ffffff", 8);
+  if (game.cashTimer > 0) {
+    const frac = Math.min(1, game.cashTimer / CASH_HOLD);
+    ctx.fillStyle = "rgba(20,60,30,0.55)";
+    ctx.beginPath(); ctx.roundRect(W / 2 - 74, 268, 148, 16, 8); ctx.fill();
+    ctx.fillStyle = "#2ed94f";
+    ctx.beginPath(); ctx.roundRect(W / 2 - 74, 268, 148 * frac, 16, 8); ctx.fill();
+    otext("CASHING OUT", W / 2, 281, 13, "#0b2010", null, 0);
+  }
+}
+
+function drawStartScreen() {
+  // settings row (decorative, matching the real start screen)
+  const icons = [
+    { x: W * 0.18, label: "SOUND" },
+    { x: W * 0.5, label: "MUSIC" },
+    { x: W * 0.82, label: "HAPTICS" },
+  ];
+  for (const ic of icons) {
+    drawIcon(ic.label, ic.x, 118);
+    otext(ic.label, ic.x, 172, 17, "#ffffff", "#1c1c1c", 5);
+  }
+  // swipe arrows
+  drawArrows(W / 2, 262);
+  otext("SWIPE LEFT/RIGHT", W / 2, 334, 30, "#ffffff", "#1c1c1c", 7);
+  otext("TO CHANGE LANES", W / 2, 366, 30, "#ffffff", "#1c1c1c", 7);
+  // fork icon
+  drawFork(W / 2, 432);
+  otext("USE CASHOUT LANE", W / 2, 508, 30, "#ffffff", "#1c1c1c", 7);
+  otext("TO KEEP YOUR SCORE", W / 2, 540, 30, "#ffffff", "#1c1c1c", 7);
+  otext("TAP TO START", W / 2, 806, 52, "#f2e42a", "#1c1c1c", 11);
+}
+
+function drawIcon(kind, x, y) {
   ctx.save();
-  ctx.translate(x, y - h / 2);
-  ctx.rotate(lean * 0.16);
-  const body = game.state === "dead" ? "#f4544c" : "#4da3ff";
-  ctx.fillStyle = body;
-  ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w * (1 - Math.abs(lean) * 0.22), h, 9); ctx.fill();
-  ctx.fillStyle = "#2b6cb0";
-  ctx.fillRect(-w / 2 + 6, -h / 2 + 14, w * (1 - Math.abs(lean) * 0.22) - 12, 16);
-  ctx.fillStyle = "#1d3550";
-  ctx.fillRect(-w / 2 + 5, h / 2 - 16, w * (1 - Math.abs(lean) * 0.22) - 10, 9);
+  ctx.translate(x, y);
+  ctx.fillStyle = "#f2e42a";
+  ctx.strokeStyle = "#f2e42a";
+  ctx.lineWidth = 4;
+  ctx.lineCap = "round";
+  if (kind === "SOUND") {
+    ctx.beginPath();
+    ctx.moveTo(-16, -7); ctx.lineTo(-7, -7); ctx.lineTo(4, -17); ctx.lineTo(4, 17); ctx.lineTo(-7, 7); ctx.lineTo(-16, 7);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(6, 0, 12, -0.9, 0.9); ctx.stroke();
+    ctx.beginPath(); ctx.arc(6, 0, 19, -0.9, 0.9); ctx.stroke();
+  } else if (kind === "MUSIC") {
+    ctx.beginPath(); ctx.ellipse(-6, 12, 7, 5, -0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(0, -16, 4, 28);
+    ctx.beginPath();
+    ctx.moveTo(0, -16); ctx.quadraticCurveTo(12, -14, 16, -6);
+    ctx.lineTo(16, -12); ctx.quadraticCurveTo(10, -20, 0, -22);
+    ctx.closePath(); ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.roundRect(-8, -16, 16, 32, 5); ctx.fill();
+    ctx.beginPath(); ctx.arc(-14, 0, 9, 1.8, 4.5); ctx.stroke();
+    ctx.beginPath(); ctx.arc(14, 0, 9, -1.35, 1.35); ctx.stroke();
+  }
   ctx.restore();
 }
 
-function drawHUD(now) {
-  ctx.fillStyle = "#8792a6";
-  ctx.font = "12px ui-monospace, monospace";
-  ctx.textAlign = "left";
-  ctx.fillText("score " + game.score, 12, 22);
-  ctx.fillText("deaths " + game.deaths, 12, 38);
-  ctx.textAlign = "right";
-  const m = multiplier();
-  ctx.fillStyle = m >= 2.5 ? "#3ecf8e" : "#d7dde8";
-  ctx.fillText(m.toFixed(2) + "x", W - 12, 22);
-  ctx.fillStyle = "#8792a6";
-  ctx.fillText("payout $" + (ENTRY_FEE * m).toFixed(2), W - 12, 38);
-  ctx.textAlign = "left";
-  if (Bot.mode) {
-    ctx.fillStyle = "#f5b942";
-    ctx.fillText("BOT: " + Bot.mode, 12, 54);
-  }
-  // cash-out progress
-  if (game.cashTimer > 0 && game.state === "running") {
-    const frac = Math.min(1, game.cashTimer / CASH_HOLD);
-    ctx.fillStyle = "rgba(62,207,142,0.25)";
-    ctx.fillRect(W / 2 - 70, 60, 140, 14);
-    ctx.fillStyle = "#3ecf8e";
-    ctx.fillRect(W / 2 - 70, 60, 140 * frac, 14);
-    ctx.fillStyle = "#0b0e13";
-    ctx.font = "10px ui-monospace, monospace";
-    ctx.textAlign = "center";
-    ctx.fillText("CASHING OUT", W / 2, 71);
-    ctx.textAlign = "left";
-  }
-  ctx.textAlign = "center";
-  if (game.state === "idle") {
-    ctx.fillStyle = "#d7dde8";
-    ctx.font = "14px ui-monospace, monospace";
-    ctx.fillText("swipe or press an arrow key to start", W / 2, H / 2);
-  } else if (game.state === "cashed") {
-    ctx.fillStyle = "#3ecf8e";
-    ctx.font = "16px ui-monospace, monospace";
-    ctx.fillText("CASHED OUT  $" + game.banked.toFixed(2), W / 2, H / 2);
-  } else if (game.state === "dead") {
-    ctx.fillStyle = "#f4544c";
-    ctx.font = "15px ui-monospace, monospace";
-    ctx.fillText("CRASHED — payout forfeited", W / 2, H / 2);
-  }
-  ctx.textAlign = "left";
-  if (game.flash > 0) {
-    ctx.fillStyle = "rgba(244,84,76," + (game.flash * 0.25) + ")";
-    ctx.fillRect(0, 0, W, H);
-    game.flash = Math.max(0, game.flash - 0.05);
-  }
+function drawArrows(x, y) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = "#b7b7b7";
+  ctx.strokeStyle = "#3a3a3a";
+  ctx.lineWidth = 3;
+  const arrow = (dir, dy) => {
+    ctx.beginPath();
+    ctx.moveTo(-34 * dir, dy);
+    ctx.lineTo(6 * dir, dy);
+    ctx.lineTo(6 * dir, dy - 10);
+    ctx.lineTo(34 * dir, dy + 5);
+    ctx.lineTo(6 * dir, dy + 20);
+    ctx.lineTo(6 * dir, dy + 10);
+    ctx.lineTo(-34 * dir, dy + 10);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+  };
+  arrow(-1, -22);
+  arrow(1, 8);
+  ctx.restore();
+}
+
+function drawFork(x, y) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.strokeStyle = "#b7b7b7";
+  ctx.lineWidth = 11;
+  ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-14, 34); ctx.lineTo(-14, -28); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(12, 34); ctx.quadraticCurveTo(12, 0, 30, -22); ctx.stroke();
+  ctx.fillStyle = "#b7b7b7";
+  ctx.beginPath();
+  ctx.moveTo(38, -34); ctx.lineTo(16, -28); ctx.lineTo(30, -12);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
 }
 
 /* ========================= INPUT PIPELINE =========================
@@ -541,7 +854,6 @@ const Input = {
       const dx = x - s.points[0].x;
       if (Math.abs(dx) >= SWIPE_THRESHOLD) {
         s.applied = true;
-        if (game.state === "idle") resetRun();
         laneChange(dx > 0 ? 1 : -1, null);
       }
     }
@@ -551,7 +863,6 @@ const Input = {
     this.active = null;
     if (!s) return;
     if (!s.applied) {
-      // aborted gesture: a touch that never committed a lane change
       const d = Math.hypot(
         s.points[s.points.length - 1].x - s.points[0].x,
         s.points[s.points.length - 1].y - s.points[0].y);
@@ -567,8 +878,18 @@ const Input = {
   },
 };
 
+function advanceState() {
+  // tap-to-start / tap-to-continue
+  if (game.state === "idle") { resetRun(); return true; }
+  if ((game.state === "dead" || game.state === "cashed") && performance.now() - game.stateAt > 450) {
+    resetRun(); return true;
+  }
+  return game.state !== "running";
+}
+
 cv.addEventListener("pointerdown", e => {
   if (Bot.mode) return;
+  if (advanceState()) return;
   cv.setPointerCapture(e.pointerId);
   Input.begin(e.offsetX, e.offsetY, e.isTrusted, "pointer");
 });
@@ -583,17 +904,18 @@ window.addEventListener("keydown", e => {
   if (Bot.mode) return;
   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
   e.preventDefault();
-  if (game.state === "idle") resetRun();
+  if (advanceState()) return;
   laneChange(e.key === "ArrowRight" ? 1 : -1, null);
   AC.recordKey(e.isTrusted);
 });
 
 /* ============================== BOT ==============================
-   Two attack modes, both driven through the same Input pipeline:
-   - perfect: instant reaction, machine-clean synthetic swipes.
-   - mirror:  replay of a small corpus of "recorded human" traces,
-              perturbed per use, with sampled human-ish reaction times.
-              This is the replayed-human-swipe attack class. */
+   Three attack modes, all driven through the same Input pipeline:
+   - perfect:    instant reaction, machine-clean synthetic swipes.
+   - mirror:     replay of a small corpus of "recorded human" traces,
+                 perturbed per use, with sampled human-ish reaction times.
+   - generative: a fresh random human-shaped trace per swipe with injected
+                 noise. Built to beat replay detection and jitter checks. */
 const Bot = {
   mode: null,
   rand: mulberry32(99),
@@ -627,20 +949,19 @@ const Bot = {
     this.pending = null;
     this.swipeRun = null;
     Input.active = null;
-    if (mode && game.state === "idle") resetRun();
+    if (mode && game.state !== "running") resetRun();
     document.getElementById("btnHuman").classList.toggle("active", !mode);
     document.getElementById("btnPerfect").classList.toggle("active", mode === "perfect");
     document.getElementById("btnMirror").classList.toggle("active", mode === "mirror");
     document.getElementById("btnGen").classList.toggle("active", mode === "generative");
   },
 
-  // a candidate lane must be free of near traffic and not walled off by a rail
   laneClear(l, threatCar) {
     if (barrierBlocks(game.lane, l, game.speed * 0.35)) return false;
     const lead = game.speed * 0.30;
     for (const car of game.cars) {
       if (car === threatCar || car.passed || car.lane !== l) continue;
-      if (car.z + CAR_HALF_L > -PLAYER_HALF_L - lead * 0 && car.z - CAR_HALF_L < lead) return false;
+      if (car.z + CAR_HALF_L > -PLAYER_HALF_L && car.z - CAR_HALF_L < lead) return false;
     }
     return true;
   },
@@ -653,7 +974,6 @@ const Bot = {
       if (!threat || car.z < threat.z) threat = car;
     }
     if (!threat) {
-      // drift out of the cash-out lane so runs don't end (bots farm, not bank)
       if (game.lane === CASH_LANE && this.laneClear(CASH_LANE - 1, null)) return -1;
       return 0;
     }
@@ -725,7 +1045,7 @@ const Bot = {
   startSwipe(dir, now) {
     const trusted = document.getElementById("hwInject").checked;
     const startX = screenX(game.x, 1) + (this.rand() - 0.5) * 10;
-    const startY = 480 + (this.rand() - 0.5) * 24;
+    const startY = 560 + (this.rand() - 0.5) * 24;
     Input.begin(startX, startY, trusted, "bot");
     let trace;
     if (this.mode === "perfect") {
@@ -766,18 +1086,20 @@ Bot.buildCorpus();
 /* =========================== ANTI-CHEAT ===========================
    Pure behavioral analysis over the input/telemetry stream. It has no
    knowledge of Bot.mode. Signals:
-   1. reaction   — dodge reaction-time distribution (superhuman floor, too-low variance)
+   1. reaction   — dodge RT distribution (floor, variance, lapse-tail shape)
    2. kinematics — swipe micro-motion (motor noise, velocity-profile diversity)
-   3. replay     — near-duplicate swipe shapes (recorded-trace replay, even perturbed)
-   4. perfection — dodge margins + survival that humans don't produce
-   5. integrity  — synthetic event provenance (isTrusted), coordinate granularity */
+   3. noise character — spectral whiteness of the micro-motion (injected vs motor)
+   4. replay     — near-duplicate swipes in shape AND timing
+   5. perfection — dodge margins + survival humans don't produce
+   6. behavior texture — aborts, contested-space entries, cashout patterns
+   7. integrity  — synthetic event provenance (isTrusted), coordinate granularity */
 const AC = {
   swipes: [], rts: [], margins: [],
   deaths: 0, dodges: 0, moves: 0, rowsPassed: 0,
   aborts: 0,
-  risks: [],            // resolved contested moves: true = survived, false = crashed
-  pendingRisks: [],     // {at} awaiting resolution
-  runEnds: [],          // "crash" | "cashout"
+  risks: [],
+  pendingRisks: [],
+  runEnds: [],
   untrustedSeen: false, keyboardOnly: true,
 
   recordSwipe(s) {
@@ -801,7 +1123,6 @@ const AC = {
   recordRunEnd(kind) { this.runEnds.push(kind); },
   recordDeath() {
     this.deaths++;
-    // a crash resolves any recent contested move as fatal
     const now = performance.now();
     for (const r of this.pendingRisks) this.risks.push(now - r.at > 1400);
     this.pendingRisks = [];
@@ -809,7 +1130,7 @@ const AC = {
   tickRisks(now) {
     while (this.pendingRisks.length && now - this.pendingRisks[0].at > 1400) {
       this.pendingRisks.shift();
-      this.risks.push(true); // survived
+      this.risks.push(true);
     }
   },
 
@@ -839,8 +1160,6 @@ const AC = {
     }
     let ints = 0;
     for (const p of pts) if (p.x === Math.round(p.x) && p.y === Math.round(p.y)) ints++;
-    // normalized speed profile over time (16 samples, unit mean): replays match
-    // in TIME as well as shape; humans vary pacing even on similar shapes
     const profile = this.speedProfile(pts, 16);
     // High-frequency noise energy: the 4th difference annihilates smooth motion
     // (through cubic) but amplifies iid noise by sqrt(70)σ; the 2nd difference
