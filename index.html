@@ -103,7 +103,13 @@
       <button id="btnHuman" class="active">Play (human)</button>
       <button id="btnPerfect">Perfect bot</button>
       <button id="btnMirror">Human-mirroring bot</button>
+      <button id="btnGen">Generative bot</button>
       <button id="btnReset">Reset telemetry</button>
+    </div>
+    <div class="stats" style="margin-top:10px">
+      thresholds are first-principles priors — production calibrates every one
+      of them on the real player corpus and replaces the linear blend with a
+      trained model over the same features
     </div>
     <label class="toggle">
       <input type="checkbox" id="hwInject">
@@ -253,6 +259,12 @@ function laneChange(dir, swipe) {
     const rt = performance.now() - best.threatAt;
     AC.recordDodge(rt, best.z / game.speed);
   }
+  // contested move: entering a lane with a car close enough to matter
+  for (const car of game.cars) {
+    if (car.passed || car.lane !== to) continue;
+    if (car.z > 0.3 && car.z < game.speed * 1.0) { AC.recordRisk(); break; }
+  }
+  AC.moves++;
   if (swipe) AC.recordSwipe(swipe);
 }
 
@@ -262,6 +274,7 @@ function crash() {
   game.flash = 1;
   game.deaths++;
   AC.recordDeath();
+  AC.recordRunEnd("crash");
 }
 
 let lastFrame = performance.now();
@@ -326,6 +339,7 @@ function frame(now) {
         game.banked = ENTRY_FEE * multiplier();
         game.state = "cashed";
         game.stateAt = now;
+        AC.recordRunEnd("cashout");
       }
     } else {
       game.cashTimer = Math.max(0, game.cashTimer - dt * 2);
@@ -336,6 +350,7 @@ function frame(now) {
     resetRun();
   }
 
+  AC.tickRisks(now);
   draw(now);
   Bot.tick(now);
   requestAnimationFrame(frame);
@@ -534,7 +549,15 @@ const Input = {
   end() {
     const s = this.active;
     this.active = null;
-    if (!s || !s.applied) return;
+    if (!s) return;
+    if (!s.applied) {
+      // aborted gesture: a touch that never committed a lane change
+      const d = Math.hypot(
+        s.points[s.points.length - 1].x - s.points[0].x,
+        s.points[s.points.length - 1].y - s.points[0].y);
+      if (d > 3 || s.points.length <= 3) AC.recordAbort();
+      return;
+    }
     AC.recordSwipe({
       points: s.points,
       trusted: s.trusted,
@@ -608,6 +631,7 @@ const Bot = {
     document.getElementById("btnHuman").classList.toggle("active", !mode);
     document.getElementById("btnPerfect").classList.toggle("active", mode === "perfect");
     document.getElementById("btnMirror").classList.toggle("active", mode === "mirror");
+    document.getElementById("btnGen").classList.toggle("active", mode === "generative");
   },
 
   // a candidate lane must be free of near traffic and not walled off by a rail
@@ -692,6 +716,7 @@ const Bot = {
     if (this.mode === "perfect") {
       this.startSwipe(dir, now);
     } else {
+      // mirror + generative both sample a clean Gaussian RT — no lapse tail
       const rt = Math.max(150, gauss(this.rand, 235, 42));
       this.pending = { fireAt: now + rt, dir };
     }
@@ -706,7 +731,7 @@ const Bot = {
     if (this.mode === "perfect") {
       trace = [];
       for (let i = 1; i <= 8; i++) trace.push({ x: (i / 8) * 110, y: 0, t: (i / 8) * 90 });
-    } else {
+    } else if (this.mode === "mirror") {
       const base = this.baseTraces[(this.rand() * this.baseTraces.length) | 0];
       const scale = 0.96 + this.rand() * 0.08, tScale = 0.96 + this.rand() * 0.08;
       trace = base.map(p => ({
@@ -714,6 +739,24 @@ const Bot = {
         y: p.y * scale + (this.rand() - 0.5) * 1.6,
         t: p.t * tScale,
       }));
+    } else {
+      // generative: a FRESH random human-shaped trace every swipe with iid
+      // noise. Beats replay-similarity and jitter checks by construction;
+      // the tells left are statistical (white noise, no lapses, no texture).
+      const r = this.rand;
+      const n = 14, dur = 130 + r() * 110, len = 95 + r() * 55, arc = (r() - 0.5) * 26;
+      const skew = 0.32 + r() * 0.3;
+      trace = [];
+      for (let i = 0; i < n; i++) {
+        const u = i / (n - 1);
+        const p = u < skew ? (u / skew) * (u / skew) * 0.5
+                           : 0.5 + (1 - Math.pow(1 - (u - skew) / (1 - skew), 2)) * 0.5;
+        trace.push({
+          x: p * len + (r() - 0.5) * 2.4,
+          y: Math.sin(u * Math.PI) * arc + (r() - 0.5) * 2.2,
+          t: u * dur,
+        });
+      }
     }
     this.swipeRun = { trace, i: 0, dir, startX, startY, t0: now };
   },
@@ -730,7 +773,11 @@ Bot.buildCorpus();
    5. integrity  — synthetic event provenance (isTrusted), coordinate granularity */
 const AC = {
   swipes: [], rts: [], margins: [],
-  deaths: 0, dodges: 0, rowsPassed: 0,
+  deaths: 0, dodges: 0, moves: 0, rowsPassed: 0,
+  aborts: 0,
+  risks: [],            // resolved contested moves: true = survived, false = crashed
+  pendingRisks: [],     // {at} awaiting resolution
+  runEnds: [],          // "crash" | "cashout"
   untrustedSeen: false, keyboardOnly: true,
 
   recordSwipe(s) {
@@ -749,11 +796,27 @@ const AC = {
     if (this.rts.length > 120) this.rts.shift();
     if (this.margins.length > 120) this.margins.shift();
   },
-  recordDeath() { this.deaths++; },
+  recordAbort() { this.aborts++; },
+  recordRisk() { this.pendingRisks.push({ at: performance.now() }); },
+  recordRunEnd(kind) { this.runEnds.push(kind); },
+  recordDeath() {
+    this.deaths++;
+    // a crash resolves any recent contested move as fatal
+    const now = performance.now();
+    for (const r of this.pendingRisks) this.risks.push(now - r.at > 1400);
+    this.pendingRisks = [];
+  },
+  tickRisks(now) {
+    while (this.pendingRisks.length && now - this.pendingRisks[0].at > 1400) {
+      this.pendingRisks.shift();
+      this.risks.push(true); // survived
+    }
+  },
 
   reset() {
     this.swipes = []; this.rts = []; this.margins = [];
-    this.deaths = 0; this.dodges = 0; this.rowsPassed = 0;
+    this.deaths = 0; this.dodges = 0; this.moves = 0; this.rowsPassed = 0;
+    this.aborts = 0; this.risks = []; this.pendingRisks = []; this.runEnds = [];
     this.untrustedSeen = false; this.keyboardOnly = true;
     game.deaths = 0; game.score = 0;
   },
@@ -776,7 +839,52 @@ const AC = {
     }
     let ints = 0;
     for (const p of pts) if (p.x === Math.round(p.x) && p.y === Math.round(p.y)) ints++;
-    return { res, jitter, peakT, dur: s.dur, trusted: s.trusted, intFrac: ints / pts.length };
+    // normalized speed profile over time (16 samples, unit mean): replays match
+    // in TIME as well as shape; humans vary pacing even on similar shapes
+    const profile = this.speedProfile(pts, 16);
+    // High-frequency noise energy: the 4th difference annihilates smooth motion
+    // (through cubic) but amplifies iid noise by sqrt(70)σ; the 2nd difference
+    // carries curvature. Their sd ratio separates injected white noise (~3.4 for
+    // pure noise, ~2.2 riding a curve) from band-limited human motion.
+    let white = NaN, wamp = 0;
+    if (pts.length >= 7) {
+      const dif = a => a.slice(1).map((v, i) => v - a[i]);
+      const sdv = a => {
+        const m = a.reduce((x, y) => x + y, 0) / a.length;
+        return Math.sqrt(a.reduce((x, y) => x + (y - m) * (y - m), 0) / a.length);
+      };
+      const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+      const d2x = dif(dif(xs)), d2y = dif(dif(ys));
+      const d4x = dif(dif(d2x)), d4y = dif(dif(d2y));
+      const e4 = sdv(d4x) + sdv(d4y), e2 = sdv(d2x) + sdv(d2y);
+      white = e4 / (e2 + 1e-9);
+      wamp = e4 / (2 * Math.sqrt(70)); // implied per-point noise sigma in px
+    }
+    return { res, profile, white, wamp, jitter, peakT, dur: s.dur, trusted: s.trusted, intFrac: ints / pts.length };
+  },
+
+  speedProfile(pts, n) {
+    const t0 = pts[0].t, dur = pts[pts.length - 1].t - t0 || 1;
+    const v = [];
+    for (let i = 1; i < pts.length; i++) {
+      const dt = pts[i].t - pts[i - 1].t || 1;
+      v.push({ t: (pts[i].t - t0) / dur, s: Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y) / dt });
+    }
+    const out = [];
+    for (let k = 0; k < n; k++) {
+      const target = k / (n - 1);
+      let i = 0;
+      while (i < v.length - 1 && v[i].t < target) i++;
+      out.push(v[i].s);
+    }
+    const mean = out.reduce((a, b) => a + b, 0) / n || 1;
+    return out.map(x => x / mean);
+  },
+
+  profileDist(a, b) {
+    let s = 0;
+    for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]);
+    return s / a.length;
   },
 
   resample(pts, n) {
@@ -813,11 +921,22 @@ const AC = {
     return { mean, sd, min: Math.min(...arr), cv: mean ? sd / mean : 0 };
   },
 
+  skewness(arr) {
+    const n = arr.length;
+    const mean = arr.reduce((a, b) => a + b, 0) / n;
+    let m2 = 0, m3 = 0;
+    for (const x of arr) { const d = x - mean; m2 += d * d; m3 += d * d * d; }
+    m2 /= n; m3 /= n;
+    return m2 > 1e-9 ? m3 / Math.pow(m2, 1.5) : 0;
+  },
+
   analyze() {
     const signals = [];
     const flags = [];
 
-    // 1. reaction time
+    // 1. reaction time — floor, variance, and distribution SHAPE. Human RT is
+    // ex-Gaussian: a heavy right tail of attentional lapses. Sampling a clean
+    // Gaussian produces a symmetric distribution no human produces.
     {
       const ready = this.rts.length >= 6;
       let sus = 0, detail = "need " + Math.max(0, 6 - this.rts.length) + " more dodges";
@@ -828,13 +947,19 @@ const AC = {
         if (st.cv < 0.10) { sus += 0.5; flags.push("reaction variance impossibly tight (cv " + st.cv.toFixed(2) + ")"); }
         else if (st.cv < 0.17) sus += 0.25;
         if (st.mean < 165) sus += 0.3;
+        let skewTxt = "";
+        if (this.rts.length >= 20) {
+          const sk = this.skewness(this.rts);
+          skewTxt = " · skew " + sk.toFixed(2);
+          if (sk < 0.15) { sus += 0.3; flags.push("no attentional lapses: RT distribution symmetric (skew " + sk.toFixed(2) + ")"); }
+        }
         sus = Math.min(1, sus);
-        detail = "mean " + st.mean.toFixed(0) + "ms · sd " + st.sd.toFixed(0) + " · min " + st.min.toFixed(0) + " · cv " + st.cv.toFixed(2);
+        detail = "mean " + st.mean.toFixed(0) + "ms · min " + st.min.toFixed(0) + " · cv " + st.cv.toFixed(2) + skewTxt;
       }
       signals.push({ name: "reaction time", sus, ready, detail });
     }
 
-    // 2. swipe kinematics
+    // 2. swipe kinematics — motor-noise magnitude + velocity-profile diversity
     {
       const sw = this.swipes;
       const ready = sw.length >= 6;
@@ -852,7 +977,30 @@ const AC = {
       signals.push({ name: "swipe kinematics", sus, ready: ready && !this.keyboardOnly, detail });
     }
 
-    // 3. replay similarity
+    // 3. noise character — injected iid noise is spectrally white; human motor
+    // noise is band-limited. Catches bots that add randomness to defeat the
+    // jitter check. Threshold is an uncalibrated prior until a human corpus
+    // pins the real distribution.
+    {
+      const ws = this.swipes.filter(s => !Number.isNaN(s.white));
+      const ready = ws.length >= 8 && !this.keyboardOnly;
+      let sus = 0, detail = this.keyboardOnly ? "keyboard play — n/a" : "need " + Math.max(0, 8 - ws.length) + " more swipes";
+      if (ready) {
+        const ratio = ws.reduce((a, s) => a + s.white, 0) / ws.length;
+        const amp = ws.reduce((a, s) => a + s.wamp, 0) / ws.length;
+        sus = 0;
+        if (ratio >= 2.0 && amp >= 0.4) {
+          sus = 0.7;
+          flags.push("high-frequency noise energy is white-noise-shaped (ratio " + ratio.toFixed(2) + ") — injected, not motor [uncalibrated prior]");
+        } else if (ratio >= 1.6 && amp >= 0.4) sus = 0.3;
+        detail = "Δ⁴/Δ² energy " + ratio.toFixed(2) + " · implied noise σ " + amp.toFixed(2) + "px (white ≥ ~2.0)";
+      }
+      signals.push({ name: "noise character", sus, ready, detail });
+    }
+
+    // 4. replay similarity — near-duplicates must match in SHAPE and TIMING.
+    // Perturbed replays of a recorded corpus match both; humans vary pacing
+    // even when shapes converge.
     {
       const sw = this.swipes.slice(-40);
       const ready = sw.length >= 8;
@@ -862,17 +1010,18 @@ const AC = {
         for (let i = 0; i < sw.length; i++)
           for (let j = i + 1; j < sw.length; j++) {
             pairs++;
-            if (this.shapeDist(sw[i].res, sw[j].res) < 0.015) close++;
+            if (this.shapeDist(sw[i].res, sw[j].res) < 0.015 &&
+                this.profileDist(sw[i].profile, sw[j].profile) < 0.30) close++;
           }
         const frac = pairs ? close / pairs : 0;
-        sus = Math.min(1, Math.max(0, (frac - 0.06) / 0.28));
-        if (frac > 0.30) flags.push("swipe shapes repeat: " + (frac * 100).toFixed(0) + "% near-duplicate pairs (trace replay)");
-        detail = (frac * 100).toFixed(0) + "% near-duplicate shape pairs across " + sw.length + " swipes";
+        sus = Math.min(1, Math.max(0, (frac - 0.05) / 0.25));
+        if (frac > 0.25) flags.push("swipes repeat in shape AND timing: " + (frac * 100).toFixed(0) + "% near-duplicate pairs (trace replay)");
+        detail = (frac * 100).toFixed(0) + "% shape+timing near-duplicate pairs across " + sw.length + " swipes";
       }
       signals.push({ name: "replay similarity", sus, ready: ready && !this.keyboardOnly, detail });
     }
 
-    // 4. perfection
+    // 5. perfection — dodge-margin consistency and survival humans don't produce
     {
       const ready = this.dodges >= 12;
       let sus = 0, detail = "need " + Math.max(0, 12 - this.dodges) + " more dodges";
@@ -892,7 +1041,42 @@ const AC = {
       signals.push({ name: "perfection", sus, ready, detail });
     }
 
-    // 5. event integrity
+    // 6. behavior texture — session-level habits automation doesn't reproduce:
+    // humans abort gestures, wander into contested space (and pay for it),
+    // and actually bank runs. Lookahead-verified play never risks anything,
+    // and when a bot injects "errors" they are always survivable.
+    {
+      const ready = this.moves >= 20;
+      let sus = 0, detail = "need " + Math.max(0, 20 - this.moves) + " more moves";
+      if (ready) {
+        sus = 0;
+        const parts = [];
+        if (this.aborts === 0 && this.moves >= 20) { sus += 0.25; parts.push("0 aborted gestures"); }
+        else parts.push(this.aborts + " aborted gestures");
+        if (this.risks.length === 0 && this.moves >= 20) {
+          sus += 0.45;
+          flags.push("never enters contested space across " + this.moves + " moves (lookahead-verified play)");
+          parts.push("0 contested moves");
+        } else if (this.risks.length >= 3) {
+          const survived = this.risks.filter(Boolean).length;
+          if (survived === this.risks.length) {
+            sus += this.risks.length >= 5 ? 0.6 : 0.45;
+            flags.push("risky moves never cost anything: " + survived + "/" + this.risks.length + " contested moves survived");
+          }
+          parts.push(survived + "/" + this.risks.length + " contested survived");
+        } else parts.push(this.risks.length + " contested moves");
+        if (this.runEnds.length >= 3 && !this.runEnds.includes("cashout")) {
+          sus += 0.3;
+          flags.push("never banks a run: " + this.runEnds.length + " runs, 0 cash-outs (farm pattern)");
+        }
+        sus = Math.min(1, sus);
+        detail = parts.join(" · ") + " · " + this.runEnds.length + " runs ended";
+      }
+      signals.push({ name: "behavior texture", sus, ready, detail });
+    }
+
+    // 7. event integrity — provenance. Cheap to spoof at the OS level, so it is
+    // corroborating evidence, never the case.
     {
       const sw = this.swipes;
       const ready = sw.length >= 3 || this.untrustedSeen;
@@ -909,7 +1093,11 @@ const AC = {
       signals.push({ name: "event integrity", sus, ready, detail });
     }
 
-    const weights = { "reaction time": 0.27, "swipe kinematics": 0.24, "replay similarity": 0.27, "perfection": 0.12, "event integrity": 0.10 };
+    const weights = {
+      "reaction time": 0.19, "swipe kinematics": 0.14, "noise character": 0.13,
+      "replay similarity": 0.19, "perfection": 0.12, "behavior texture": 0.13,
+      "event integrity": 0.10,
+    };
     let wsum = 0, acc = 0, readyCount = 0;
     for (const s of signals) {
       if (!s.ready) continue;
@@ -918,11 +1106,17 @@ const AC = {
       acc += weights[s.name] * s.sus;
     }
     let overall = wsum ? acc / wsum : 0;
-    // a single high-confidence detector escalates on its own; an ensemble
-    // average must not wash out a smoking gun like wholesale trace replay
-    let maxSus = 0;
-    for (const s of signals) if (s.ready && s.sus > maxSus) maxSus = s.sus;
+    // Escalation: an ensemble average must not wash out convergent evidence.
+    // One smoking gun, or several independently suspicious signals, escalates.
+    let maxSus = 0, hot = 0;
+    for (const s of signals) {
+      if (!s.ready) continue;
+      if (s.sus > maxSus) maxSus = s.sus;
+      if (s.sus >= 0.55) hot++;
+    }
     if (maxSus >= 0.85) overall = Math.max(overall, maxSus * 0.75);
+    if (hot >= 2) overall = Math.max(overall, 0.62);
+    if (hot >= 3) overall = Math.max(overall, 0.72);
     return { signals, flags, overall, ready: readyCount >= 2 };
   },
 };
@@ -962,6 +1156,7 @@ setInterval(renderPanel, 400);
 document.getElementById("btnHuman").onclick = () => Bot.set(null);
 document.getElementById("btnPerfect").onclick = () => { AC.reset(); Bot.set("perfect"); };
 document.getElementById("btnMirror").onclick = () => { AC.reset(); Bot.set("mirror"); };
+document.getElementById("btnGen").onclick = () => { AC.reset(); Bot.set("generative"); };
 document.getElementById("btnReset").onclick = () => { AC.reset(); };
 
 requestAnimationFrame(frame);
