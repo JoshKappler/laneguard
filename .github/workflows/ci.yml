@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  CI: true
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Must run before actions/setup-node so its pnpm cache step can find
+      # `pnpm` on PATH (it shells out to `pnpm store path` to locate the store).
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # No build-script-approval flag needed: pnpm-workspace.yaml's
+      # `allowBuilds: esbuild: true` already pre-approves esbuild's postinstall,
+      # so a frozen-lockfile install succeeds cleanly on a cold store/runner.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Batch (headless simulation run)
+        run: pnpm batch
+
+      - name: Build
+        run: pnpm build

@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="color-scheme" content="dark">
+<title>laneguard recorder</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%; overflow: hidden; background: #0b0e13; color: #d7dde8;
+    font-family: -apple-system, system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    overscroll-behavior: none; touch-action: none;
+  }
+  body { height: 100dvh; display: flex; flex-direction: column; }
+
+  #bar {
+    flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; z-index: 10;
+    padding: calc(env(safe-area-inset-top) + 8px) 8px 8px;
+    background: #12161f; border-bottom: 1px solid #232a38;
+  }
+  #row1, #row2 { display: flex; gap: 6px; }
+  #row1 input, #row1 select {
+    min-width: 0; padding: 8px 5px; font-size: 16px; border: 1px solid #232a38;
+    border-radius: 8px; background: #0b0e13; color: #d7dde8;
+    -webkit-user-select: text; user-select: text;
+  }
+  #subject { flex: 0.8; }
+  #device { flex: 1.4; }
+  #inputMode { flex: 0.9; font-size: 13px; padding: 8px 2px; }
+  #row2 { align-items: stretch; }
+  #count {
+    min-width: 40px; display: flex; align-items: center; justify-content: center;
+    font-variant-numeric: tabular-nums; font-size: 15px; font-weight: 600;
+    background: #0b0e13; border: 1px solid #232a38; border-radius: 8px; padding: 8px 6px;
+  }
+  #row2 button {
+    flex: 1; padding: 10px 4px; font-size: 13px; border: 0; border-radius: 8px;
+    background: #232a38; color: #d7dde8;
+  }
+  #row2 button:active { background: #4da3ff; color: #0b0e13; }
+  #clearBtn { color: #f4544c; }
+
+  #game { position: relative; flex: 1 1 auto; min-height: 0; touch-action: none; overflow: hidden; }
+  #cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #flash {
+    position: absolute; inset: 0; pointer-events: none; opacity: 0;
+    background: #f4544c; transition: opacity 90ms;
+  }
+  #crashMsg {
+    position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 28px; font-weight: 700; letter-spacing: 3px; color: #f4544c;
+    opacity: 0; pointer-events: none; transition: opacity 90ms;
+    text-shadow: 0 2px 14px rgba(0, 0, 0, .6);
+  }
+  #hint {
+    position: absolute; bottom: calc(env(safe-area-inset-bottom) + 14px); left: 0; right: 0;
+    text-align: center; color: #8792a6; font-size: 13px; pointer-events: none; padding: 0 14px;
+  }
+
+  #io {
+    position: fixed; inset: 8% 5%; z-index: 20; display: none; flex-direction: column; gap: 8px;
+    background: #12161f; border: 1px solid #232a38; border-radius: 12px; padding: 12px;
+  }
+  #ioHead { font-size: 12px; color: #8792a6; }
+  #ioText {
+    flex: 1; background: #0b0e13; color: #3ecf8e; border: 1px solid #232a38; border-radius: 8px;
+    padding: 8px; font-size: 10px; font-family: ui-monospace, Menlo, Consolas, monospace;
+    -webkit-user-select: text; user-select: text; resize: none;
+  }
+  #ioBtns { display: flex; gap: 6px; }
+  #ioBtns button {
+    flex: 1; padding: 12px; font-size: 14px; border: 0; border-radius: 8px;
+    background: #232a38; color: #d7dde8;
+  }
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <div id="row1">
+    <input id="subject" type="text" value="s1" maxlength="24" autocomplete="off"
+      autocapitalize="off" spellcheck="false" aria-label="subject id" placeholder="subject">
+    <input id="device" type="text" maxlength="48" autocomplete="off"
+      autocapitalize="off" spellcheck="false" aria-label="device" placeholder="device">
+    <select id="inputMode" aria-label="input mode">
+      <option value="touch">touch</option>
+      <option value="mouse">mouse</option>
+    </select>
+  </div>
+  <div id="row2">
+    <div id="count" title="swipes recorded">0</div>
+    <button id="exportBtn">Export</button>
+    <button id="copyBtn">Copy</button>
+    <button id="clearBtn">Clear</button>
+  </div>
+</div>
+
+<div id="game">
+  <canvas id="cv"></canvas>
+  <div id="flash"></div>
+  <div id="crashMsg">CRASHED</div>
+  <div id="hint">Swipe left/right to dodge. Every swipe is recorded. Export when done.</div>
+</div>
+
+<div id="io">
+  <div id="ioHead">export JSON <span id="ioMeta"></span></div>
+  <textarea id="ioText" readonly></textarea>
+  <div id="ioBtns">
+    <button id="selectBtn">Select all</button>
+    <button id="closeIoBtn">Close</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ---------------------------------------------------------------------------
+ * hidden self-test: confirms the export shape survives a JSON round-trip.
+ * Uses only local throwaway data — never touches `data` / localStorage, so no
+ * test fixture ever leaks into the persisted or exported corpus.
+ * ------------------------------------------------------------------------- */
+(function selfTest() {
+  const fake = {
+    meta: { subject: 's0', device: 'test-rig', input: 'mouse', date: '2000-01-01' },
+    swipes: [{ id: 1, dir: 'R', dur: 42, points: [{ x: 1, y: 2, t: 0 }, { x: 30.5, y: 4.2, t: 42 }] }]
+  };
+  let parsed;
+  try {
+    parsed = JSON.parse(JSON.stringify(fake));
+  } catch (e) {
+    console.assert(false, 'selftest: JSON.stringify/parse threw: ' + e);
+    return;
+  }
+  console.assert(parsed && typeof parsed === 'object', 'selftest: root is an object');
+  console.assert(parsed.meta && typeof parsed.meta.subject === 'string', 'selftest: meta.subject is a string');
+  console.assert(typeof parsed.meta.device === 'string', 'selftest: meta.device is a string');
+  console.assert(parsed.meta.input === 'touch' || parsed.meta.input === 'mouse', 'selftest: meta.input is touch|mouse');
+  console.assert(/^\d{4}-\d{2}-\d{2}$/.test(parsed.meta.date), 'selftest: meta.date is YYYY-MM-DD');
+  console.assert(Array.isArray(parsed.swipes) && parsed.swipes.length === 1, 'selftest: swipes is an array');
+  const sw = parsed.swipes[0];
+  console.assert(typeof sw.id === 'number', 'selftest: swipe.id is a number');
+  console.assert(sw.dir === 'L' || sw.dir === 'R', 'selftest: swipe.dir is L|R');
+  console.assert(typeof sw.dur === 'number', 'selftest: swipe.dur is a number');
+  console.assert(Array.isArray(sw.points) && sw.points.length === 2, 'selftest: points is an array');
+  console.assert(sw.points[0].t === 0, 'selftest: first point t is 0');
+  console.assert(['x', 'y', 't'].every((k) => typeof sw.points[0][k] === 'number'), 'selftest: point fields are numeric');
+  console.log('[laneguard recorder] self-test passed: export schema shape OK');
+})();
+
+/* ------------------------------- helpers --------------------------------- */
+const $ = (id) => document.getElementById(id);
+const round1 = (n) => Math.round(n * 10) / 10;
+
+function todayStr() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+function guessInput() {
+  try {
+    if (window.matchMedia && matchMedia('(pointer: coarse)').matches) return 'touch';
+  } catch (e) {}
+  if ('ontouchstart' in window && navigator.maxTouchPoints > 0) return 'touch';
+  return 'mouse';
+}
+function guessDevice() {
+  const ua = navigator.userAgent || '';
+  if (/iPhone/.test(ua)) return 'iphone';
+  if (/iPad/.test(ua)) return 'ipad';
+  if (/Android/.test(ua)) {
+    const m = ua.match(/;\s*([^;)]+)\s*\)/);
+    return m ? 'android-' + m[1].trim().toLowerCase().replace(/\s+/g, '-') : 'android';
+  }
+  if (/Macintosh/.test(ua)) return 'mac';
+  if (/Windows/.test(ua)) return 'windows';
+  if (/Linux/.test(ua)) return 'linux';
+  return 'unknown';
+}
+
+/* ---------------------------- state / storage ----------------------------- */
+const KEY = 'laneguard-corpus';
+const SWIPE_MIN_DX = 28; // px of horizontal travel that commits a swipe (matches lib/core/config.ts game.swipeThreshold)
+
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY));
+    if (d && Array.isArray(d.swipes)) {
+      return {
+        subject: typeof d.subject === 'string' ? d.subject : 's1',
+        device: typeof d.device === 'string' ? d.device : guessDevice(),
+        input: (d.input === 'touch' || d.input === 'mouse') ? d.input : guessInput(),
+        swipes: d.swipes
+      };
+    }
+  } catch (e) {}
+  return { subject: 's1', device: guessDevice(), input: guessInput(), swipes: [] };
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {}
+}
+
+let data = load();
+
+const subjectEl = $('subject'), deviceEl = $('device'), inputEl = $('inputMode');
+const countEl = $('count');
+const gameEl = $('game'), cv = $('cv'), ctx = cv.getContext('2d');
+const flashEl = $('flash'), crashEl = $('crashMsg');
+const io = $('io'), ioText = $('ioText'), ioMeta = $('ioMeta');
+
+subjectEl.value = data.subject;
+deviceEl.value = data.device;
+inputEl.value = data.input;
+
+function updateCount() { countEl.textContent = String(data.swipes.length); }
+updateCount();
+
+subjectEl.addEventListener('input', () => { data.subject = subjectEl.value; save(); });
+deviceEl.addEventListener('input', () => { data.device = deviceEl.value; save(); });
+inputEl.addEventListener('change', () => { data.input = inputEl.value; save(); });
+
+/* --------------------------------- export --------------------------------- */
+function buildExport() {
+  return {
+    meta: {
+      subject: data.subject || 's1',
+      device: data.device || 'unknown',
+      input: data.input === 'touch' ? 'touch' : 'mouse',
+      date: todayStr()
+    },
+    swipes: data.swipes
+  };
+}
+
+$('exportBtn').onclick = () => {
+  const out = buildExport();
+  const json = JSON.stringify(out);
+  JSON.parse(json); // verify it round-trips before handing it to the user
+  const blob = new Blob([json], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `swipes-${out.swipes.length}-${out.meta.date}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+};
+
+$('copyBtn').onclick = async () => {
+  const out = buildExport();
+  const json = JSON.stringify(out);
+  let copied = false;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(json);
+      copied = true;
+    }
+  } catch (e) {}
+  ioMeta.textContent = copied ? '(copied to clipboard)' : '(select all below, then copy)';
+  ioText.value = json;
+  io.style.display = 'flex';
+  ioText.focus();
+  ioText.setSelectionRange(0, ioText.value.length);
+};
+$('selectBtn').onclick = () => { ioText.focus(); ioText.setSelectionRange(0, ioText.value.length); };
+$('closeIoBtn').onclick = () => { io.style.display = 'none'; };
+
+$('clearBtn').onclick = () => {
+  if (!confirm(`Delete all ${data.swipes.length} recorded swipes? This cannot be undone.`)) return;
+  data.swipes = [];
+  save();
+  updateCount();
+};
+
+/* ----------------------------- pointer capture ----------------------------- */
+// pointerdown/move/up covers touch AND mouse uniformly; #game has touch-action:
+// none so iOS never hijacks the drag as a scroll/zoom gesture.
+let active = null; // { id, startedAt, points: [] }
+
+gameEl.addEventListener('pointerdown', (e) => {
+  if (active) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  try { gameEl.setPointerCapture(e.pointerId); } catch (e2) {}
+  active = { id: e.pointerId, startedAt: performance.now(), points: [{ x: round1(e.clientX), y: round1(e.clientY), t: 0 }] };
+  e.preventDefault();
+}, { passive: false });
+
+gameEl.addEventListener('pointermove', (e) => {
+  if (!active || e.pointerId !== active.id) return;
+  active.points.push({ x: round1(e.clientX), y: round1(e.clientY), t: Math.round(performance.now() - active.startedAt) });
+  e.preventDefault();
+}, { passive: false });
+
+gameEl.addEventListener('pointerup', (e) => {
+  if (!active || e.pointerId !== active.id) return;
+  active.points.push({ x: round1(e.clientX), y: round1(e.clientY), t: Math.round(performance.now() - active.startedAt) });
+  finishGesture();
+  e.preventDefault();
+}, { passive: false });
+
+gameEl.addEventListener('pointercancel', (e) => {
+  if (!active || e.pointerId !== active.id) return;
+  active = null;
+});
+gameEl.addEventListener('contextmenu', (e) => e.preventDefault());
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+
+function finishGesture() {
+  const pts = active.points;
+  active = null;
+  if (pts.length < 2) return;
+  const dx = pts[pts.length - 1].x - pts[0].x;
+  if (Math.abs(dx) <= SWIPE_MIN_DX) return; // below threshold: not a committed swipe, not recorded
+  const dir = dx < 0 ? 'L' : 'R';
+  const dur = pts[pts.length - 1].t;
+  const swipe = { id: data.swipes.length + 1, dir, dur, points: pts };
+  data.swipes.push(swipe);
+  save();
+  updateCount();
+  applyLaneChange(dir);
+}
+
+/* ----------------------------------- game ---------------------------------- */
+// Minimal lane-runner: 4 lanes, player fixed near the bottom, obstacles spawn
+// at the top and scroll down toward the player. Speed & spawn rate ramp with
+// survival time to create real time pressure. Not the real game's physics —
+// just enough structure to elicit natural, directed, time-pressured swipes.
+const LANES = 4;
+const BASE_SPEED = 230, MAX_SPEED = 620, SPEED_RAMP = 16;   // px/s, px/s, px/s per second survived
+const SPAWN_START = 950, SPAWN_MIN = 430, SPAWN_RAMP = 11;  // ms, ms, ms shaved per second survived
+const CRASH_PAUSE_MS = 700;
+const COLOR = { bg: '#0b0e13', divider: '#232a38', player: '#4da3ff', obstacle: '#f5b942', obstacleEdge: '#a3352c' };
+
+let W = 0, H = 0, laneW = 0, dpr = 1;
+let game = null;
+
+const laneX = (i) => laneW * (i + 0.5);
+const playerH = () => Math.min(84, laneW * 1.3);
+const playerW = () => laneW * 0.52;
+const obsH = () => Math.min(78, laneW * 1.2);
+const obsW = () => laneW * 0.58;
+
+function resetRun(now) {
+  game = {
+    lane: 1,
+    renderX: laneX(1),
+    obstacles: [],
+    speed: BASE_SPEED,
+    spawnGap: SPAWN_START,
+    runStart: now,
+    lastSpawn: now - SPAWN_START * 0.5,
+    crashed: false,
+    crashAt: 0
+  };
+}
+
+function applyLaneChange(dir) {
+  if (!game || game.crashed) return;
+  if (dir === 'L') game.lane = Math.max(0, game.lane - 1);
+  else game.lane = Math.min(LANES - 1, game.lane + 1);
+}
+
+function resize() {
+  const rect = gameEl.getBoundingClientRect();
+  dpr = window.devicePixelRatio || 1;
+  W = rect.width; H = rect.height;
+  laneW = W / LANES;
+  cv.width = Math.round(W * dpr);
+  cv.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', resize);
+
+function crash(now) {
+  if (game.crashed) return;
+  game.crashed = true;
+  game.crashAt = now;
+  flashEl.style.opacity = '0.35';
+  crashEl.style.opacity = '1';
+  setTimeout(() => { flashEl.style.opacity = '0'; }, 140);
+}
+
+function update(dt, now) {
+  if (game.crashed) {
+    if (now - game.crashAt > CRASH_PAUSE_MS) {
+      crashEl.style.opacity = '0';
+      resetRun(now);
+    }
+    return;
+  }
+  const elapsed = (now - game.runStart) / 1000;
+  game.speed = Math.min(MAX_SPEED, BASE_SPEED + elapsed * SPEED_RAMP);
+  game.spawnGap = Math.max(SPAWN_MIN, SPAWN_START - elapsed * SPAWN_RAMP);
+
+  if (now - game.lastSpawn >= game.spawnGap) {
+    game.lastSpawn = now;
+    game.obstacles.push({ lane: Math.floor(Math.random() * LANES), y: -obsH() });
+  }
+
+  for (const o of game.obstacles) o.y += game.speed * dt;
+  game.obstacles = game.obstacles.filter((o) => o.y < H + obsH());
+
+  const playerY = H - 96, pH = playerH();
+  for (const o of game.obstacles) {
+    if (o.lane !== game.lane) continue;
+    const oH = obsH();
+    const overlapY = (o.y + oH / 2) >= (playerY - pH / 2) && (o.y - oH / 2) <= (playerY + pH / 2);
+    if (overlapY) { crash(now); break; }
+  }
+
+  const targetX = laneX(game.lane);
+  game.renderX += (targetX - game.renderX) * Math.min(1, dt * 16);
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function render(now) {
+  ctx.fillStyle = COLOR.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.strokeStyle = COLOR.divider;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([14, 16]);
+  ctx.lineDashOffset = -((now / 1000) * (game ? game.speed : BASE_SPEED)) % 30;
+  for (let i = 1; i < LANES; i++) {
+    ctx.beginPath();
+    ctx.moveTo(laneW * i, 0);
+    ctx.lineTo(laneW * i, H);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  if (!game) return;
+
+  for (const o of game.obstacles) {
+    const w = obsW(), h = obsH();
+    ctx.fillStyle = COLOR.obstacle;
+    roundRect(laneX(o.lane) - w / 2, o.y - h / 2, w, h, 10);
+    ctx.fill();
+    ctx.strokeStyle = COLOR.obstacleEdge;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  const playerY = H - 96, pw = playerW(), ph = playerH();
+  ctx.fillStyle = COLOR.player;
+  roundRect(game.renderX - pw / 2, playerY - ph / 2, pw, ph, 10);
+  ctx.fill();
+
+  ctx.fillStyle = '#8792a6';
+  ctx.font = '12px -apple-system, system-ui, sans-serif';
+  ctx.textBaseline = 'top';
+  const survived = game.crashed ? 0 : Math.floor((now - game.runStart) / 1000);
+  ctx.fillText(`${survived}s`, 10, 10);
+}
+
+let lastFrame = performance.now();
+function tick(now) {
+  const dt = Math.min(0.05, (now - lastFrame) / 1000);
+  lastFrame = now;
+  if (W === 0 || H === 0) resize();
+  if (!game) resetRun(now);
+  update(dt, now);
+  render(now);
+  requestAnimationFrame(tick);
+}
+
+resize();
+resetRun(performance.now());
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
