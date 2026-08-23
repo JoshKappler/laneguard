@@ -88,6 +88,11 @@ low-frequency drift. Measured over 40 synthesized swipes per model:
 | iid Gaussian | 2.40 | 1.76 px | yes |
 | pink + tremor + drift | 1.88 | 1.60 px | **no** |
 
+Live confirmation, not just offline synthesis: running the generative bot with organic
+noise ON and hardware-level injection ON, the full client-side detector returns
+**HUMAN, confidence 0.21** (noise character falls to 0.30, below its flag threshold).
+The bot beats every swipe-level signal in this bench.
+
 That is the honest conclusion, and it is the reason this bench exists: **swipe-level
 motor forensics are defeatable by an attacker who models human motor noise properly.**
 They remain worth shipping (they catch the 90% of bots that don't bother), but they
