@@ -6,8 +6,14 @@ first-principles prior.
 
 **This data is gitignored by default.** Swipe kinematics are behavioral-biometric
 adjacent — they can fingerprint an individual — so raw recordings are not
-committed. Only `corpus/sample/` (a small, consented, anonymized slice) is
-tracked, so CI and the ROC pipeline have something to run against.
+committed. `corpus/sample/` is tracked and reserved for a small consented,
+anonymized slice.
+
+**Status: the directory is empty — no corpus has been recorded yet.** No
+synthetic stand-in is committed either, deliberately: a fabricated corpus would
+produce fitted-looking thresholds that mean nothing. Until a real recording
+exists, `lib/detect/thresholds.generated.ts` says `basis: "prior"` and the bench
+labels every cut as uncalibrated.
 
 ## Format
 
@@ -28,10 +34,14 @@ Each file is one recording session, matching the `swipebot` recorder schema:
 
 ## Recording
 
-Serve `recorder/index.html` over your LAN and open it on a phone (see
-`docs/corpus.md`). Export produces one JSON per session; drop it in `corpus/`.
-Then regenerate calibrated thresholds:
+Serve `recorder/index.html` over your LAN and open it on a phone. Export
+produces one JSON per session; drop it in `corpus/`. Then regenerate calibrated
+thresholds:
 
 ```
-pnpm calibrate   # writes lib/detect/thresholds.generated.ts + docs/roc figures
+pnpm calibrate   # writes lib/detect/thresholds.generated.ts + results/calibration.json
 ```
+
+Aim for 300–500 swipes, ideally across both phone (touch) and desktop (mouse)
+and more than one subject — `calibrate` needs ≥ 50 swipes before it will fit
+anything, and separates by input type because motor noise differs between them.

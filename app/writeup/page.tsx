@@ -17,8 +17,21 @@ function H({ n, children }: { n: string; children: React.ReactNode }) {
     </h2>
   );
 }
-function P({ children }: { children: React.ReactNode }) {
-  return <p style={{ ...serif, fontSize: 17, lineHeight: 1.7, color: "var(--ink)", margin: "0 0 16px", maxWidth: "68ch" }}>{children}</p>;
+function P({ children, dim }: { children: React.ReactNode; dim?: boolean }) {
+  return (
+    <p
+      style={{
+        ...serif,
+        fontSize: dim ? 14.5 : 17,
+        lineHeight: dim ? 1.6 : 1.7,
+        color: dim ? "var(--ink-3)" : "var(--ink)",
+        margin: dim ? "-8px 0 20px" : "0 0 16px",
+        maxWidth: "68ch",
+      }}
+    >
+      {children}
+    </p>
+  );
 }
 function Note({ children }: { children: React.ReactNode }) {
   return (
@@ -35,7 +48,7 @@ function Table({ head, rows, hot }: { head: string[]; rows: (string | number)[][
         <thead>
           <tr>
             {head.map((h, i) => (
-              <th key={i} style={{ textAlign: i === 0 ? "left" : "right", color: "var(--ink-3)", fontWeight: 500, padding: "6px 10px", borderBottom: "1px solid var(--line-strong)" }}>{h}</th>
+              <th key={i} style={{ textAlign: i === 0 ? "left" : "right", color: "var(--ink-3)", fontWeight: 500, padding: "6px 10px", borderBottom: "1px solid var(--line-strong)", whiteSpace: "nowrap" }}>{h}</th>
             ))}
           </tr>
         </thead>
@@ -135,21 +148,29 @@ export default function Writeup() {
 
       <H n="02">The arms race, measured</H>
       <P>
-        The honest headline is that a competent attacker beats the entire client-side detector, and
-        the bench demonstrates it rather than hiding it. An anti-cheat pitch that overclaims is worse
-        than useless to a team that has thought about this problem longer than we have. Each attacker,
-        180&nbsp;s across 12 seeds:
+        The honest headline is that a competent attacker is never actioned by the client-side
+        detector, and the bench demonstrates it rather than hiding it. An anti-cheat pitch that
+        overclaims is worse than useless to a team that has thought about this problem longer than
+        we have — and it cuts both ways, because the result below is neither &ldquo;the bot is
+        invisible&rdquo; nor &ldquo;the detector wins&rdquo;. Each attacker, 180&nbsp;s across 12
+        seeds. Note that the verdict at the final tick and whether a tier was <em>ever</em> reached
+        are different numbers; the second is the one enforcement acts on.
       </P>
       <Table
-        head={["attacker", "verdict", "conf", "t→BOT", "jitter", "Δ⁴/Δ²", "RT floor"]}
+        head={["attacker", "verdict @180s", "ever SUSP", "ever BOT", "conf", "t→BOT", "jitter", "Δ⁴/Δ²", "RT floor"]}
         rows={[
-          ["naive scripted", "BOT 100%", "0.75", "30 s", "0.00", "0.00", "150 ms"],
-          ["replay farm (injected)", "BOT 100%", "0.75", "52 s", "1.82", "2.29", "260 ms"],
-          ["evasive generative", "BOT 17%", "0.33", "80 s", "1.65", "1.76", "236 ms"],
-          ["stealth camouflage", "HUMAN", "0.09", "never", "1.62", "1.77", "274 ms"],
+          ["naive scripted", "BOT 100%", "0/12", "12/12", "0.75", "30 s", "0.00", "0.00", "150 ms"],
+          ["replay farm (injected)", "BOT 100%", "0/12", "12/12", "0.75", "52 s", "1.82", "2.29", "260 ms"],
+          ["evasive generative", "BOT 17%", "9/12", "5/12", "0.33", "80 s *", "1.65", "1.76", "236 ms"],
+          ["stealth camouflage", "HUMAN 12/12", "3/12", "0/12", "0.09", "never", "1.62", "1.77", "274 ms"],
         ]}
-        hot={(r, c) => r === 3 && c === 1}
+        hot={(r, c) => r === 3 && c === 3}
       />
+      <P dim>
+        * median over the five seeds that reached BOT at all, not over all twelve. The evasive bot
+        <em> ends</em> the session called BOT on 17% of seeds but touches BOT on 42% and SUSPECT on
+        75% — reading the final verdict alone understates the detector by more than half.
+      </P>
       <P>
         The evasive generative bot defeats every swipe-level motor-forensics signal by modeling human
         motor noise correctly — pink 1/f noise, an 8–12&nbsp;Hz physiological tremor, and low-frequency
@@ -164,12 +185,25 @@ export default function Writeup() {
         hot={(r, c) => r === 1 && c === 2}
       />
       <P>
-        The evasive bot still trips <em>behavior texture</em> over a few minutes (it never enters
-        contested space), so it flags on 17% of seeds by 180&nbsp;s. The stealth rung closes that gap:
-        it enters contested space on purpose and sometimes genuinely crashes for it, fakes aborted
-        gestures, and gates its reaction times to threat onset with an ex-Gaussian sampler that has a
-        real lapse tail. It reads HUMAN, confidence 0.09, and never flags as BOT across three
-        sustained minutes and three seeds. That is the ceiling of client-side behavioral detection.
+        The evasive bot still trips <em>behavior texture</em> over a few minutes, because it never
+        enters contested space and lookahead-verified play eventually shows. The stealth rung closes
+        that gap: it enters contested space on purpose and sometimes genuinely crashes for it, fakes
+        aborted gestures, and gates its reaction times to threat onset with an ex-Gaussian sampler
+        that has a real lapse tail. Held out to <strong>10 minutes across 12 seeds</strong>, it ends
+        HUMAN on <strong>12/12</strong> at mean confidence <strong>0.06</strong> and reaches BOT on{" "}
+        <strong>none</strong> — but it does transiently trip the SUSPECT review tier on 3 of those 12
+        (at 68, 75 and 91&nbsp;s) before falling back.
+      </P>
+      <P>
+        So the honest statement is not that the bot is invisible. It is that the detector never gets
+        enough to act on, and occasionally gets just enough to ask a human to look. Note the
+        direction of travel: confidence <em>falls</em> from 0.09 at three minutes to 0.06 at ten,
+        because the session-level signals need volume and this attacker supplies human-shaped volume.
+        Time is on the attacker&apos;s side. The one residual grip is a single signal — on the seeds
+        that flagged, it was &ldquo;never enters contested space&rdquo;, meaning the bot&apos;s
+        deliberate risk rate of 0.7/min was sometimes short of the detector&apos;s window. An
+        attacker who noticed would raise it and pay a few more crashes. That is the ceiling of
+        client-side behavioral detection.
       </P>
 
       <H n="03">The seven signals</H>
@@ -201,17 +235,22 @@ export default function Writeup() {
         a binomial noise floor of 2.9&nbsp;pp. Sweeping the bot&apos;s win rate against it:
       </P>
       <Table
-        head={["bot win rate", "EV / game", "z-score", "percentile"]}
+        head={["bot win rate", "EV / game", "z-score", "players at or above (of 400)"]}
         rows={[
-          ["55%", "−$0.60", "1.3σ", "93.5 (loses money)"],
-          ["60%", "−$0.20", "2.6σ", "99.25"],
-          ["62.5%", "$0.00", "3.3σ", "99.5 (break-even)"],
-          ["65%", "+$0.20", "3.9σ", "99.75"],
-          ["70%", "+$0.60", "5.2σ", "99.75"],
-          ["80%", "+$1.40", "7.8σ", "100"],
+          ["55%", "−$0.60", "1.3σ", "26 — loses money"],
+          ["60%", "−$0.20", "2.6σ", "3"],
+          ["62.5%", "$0.00", "3.3σ", "2 — break-even"],
+          ["65%", "+$0.20", "3.9σ", "1"],
+          ["70%", "+$0.60", "5.2σ", "1"],
+          ["80%", "+$1.40", "7.8σ", "0"],
         ]}
         hot={(r) => r === 2}
       />
+      <P dim>
+        The last column is a raw count, not a percentile: an empirical percentile against 400
+        simulated players has 0.25&nbsp;pp resolution and pins at 100 the moment nobody beats the bot,
+        which reads like precision the simulation does not have.
+      </P>
       <P>
         There is no profitable-and-hidden zone. The instant a bot clears the rake wall it is already a
         &gt; 3σ outlier, and every extra dollar pushes it further out; throttling the win rate to look
@@ -258,6 +297,15 @@ export default function Writeup() {
         on real data. The stealth attacker is a model, not a captured real-world bot; a real one would
         face device attestation this bench does not simulate. Collusion and farm fingerprinting are
         described, not built.
+      </P>
+      <P>
+        Two more worth stating plainly. <strong>&ldquo;Never actioned&rdquo; is not &ldquo;never
+        noticed&rdquo;</strong> — the stealth attacker trips the SUSPECT review tier on 3 of 12 seeds,
+        so a defender who staffs a review queue rather than only auto-banning at the BOT tier recovers
+        some signal from exactly those seeds. That is a narrow but real foothold, and it is reported
+        here rather than rounded away. And every attacker number on this page is measured over 180 or
+        600&nbsp;s of a <em>single account</em>; nothing here models an adversary who tunes against the
+        detector over weeks, which is the realistic one.
       </P>
 
       <div style={{ marginTop: 48, paddingTop: 16, borderTop: "1px solid var(--line)" }}>

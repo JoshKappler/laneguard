@@ -290,9 +290,21 @@ export class Detector {
             "swipes repeat in shape AND timing: " + (frac * 100).toFixed(0) +
               "% near-duplicate pairs (trace replay)"
           );
+        // Also report how many individual swipes have at least one near-twin.
+        // Without it the panel ("4% of pairs") reads as contradicting the log,
+        // which marks a swipe the moment its nearest neighbour matches — both
+        // are true, they just count different things.
+        const withTwin = sw.filter((s) =>
+          sw.some(
+            (o) =>
+              o !== s &&
+              shapeDist(s.res, o.res) < RP.shapeDupe &&
+              profileDist(s.profile, o.profile) < RP.profileDupe
+          )
+        ).length;
         detail =
-          (frac * 100).toFixed(0) + "% shape+timing near-duplicate pairs across " +
-          sw.length + " swipes";
+          (frac * 100).toFixed(0) + "% of pairs near-duplicate in shape+timing · " +
+          withTwin + "/" + sw.length + " swipes have a near-twin";
       }
       signals.push({ name: "replay similarity", sus, ready, detail });
     }

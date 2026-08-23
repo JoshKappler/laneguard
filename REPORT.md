@@ -26,7 +26,7 @@ of the defense:
 | **T1 replay** | records human swipes, replays them perturbed | jitter/kinematics checks |
 | **T2 generative** | synthesizes fresh human-shaped swipes with injected noise | replay-similarity checks |
 | **T2+ organic** | models the *structure* of human motor noise (pink 1/f + tremor + drift) | every swipe-level motor-forensics signal |
-| **T3 stealth** | organic noise + ex-Gaussian reaction times gated to threat onset + deliberate imperfect play | the entire client-side detector |
+| **T3 stealth** | organic noise + ex-Gaussian reaction times gated to threat onset + deliberate imperfect play | every enforcement action the client-side detector can take |
 | **T4 farm / collusion** | many accounts, shared trace corpus, or two accounts feeding each other wins | within-account analysis entirely |
 
 The bench implements T0–T3 as switchable attackers driving the exact same input
@@ -62,19 +62,33 @@ It is a model of a threat, not a clone of a product.
 
 ## 3. The arms race, measured (read this first)
 
-The honest headline is that **a competent attacker beats the entire client-side
-detector**, and the bench demonstrates it rather than hiding it. This is the most
-important property of the project: an anti-cheat pitch that overclaims is worse
-than useless to a team that has thought about this longer than we have.
+The honest headline is that **a competent attacker is never actioned by the
+client-side detector**, and the bench demonstrates it rather than hiding it.
+This is the most important property of the project: an anti-cheat pitch that
+overclaims is worse than useless to a team that has thought about this longer
+than we have. It cuts both ways — the precise result below is neither "the bot
+is invisible" nor "the detector wins", and both of those would have been easier
+to write.
 
-Running each attacker for 180 s across 12 seeds (`pnpm batch`):
+Running each attacker for 180 s across 12 seeds (`pnpm batch`). Two columns
+matter and they are not the same number: the verdict at the *end* of the
+session, and whether a tier was *ever* reached during it — the second is the
+enforcement question, because SUSPECT queues a review and BOT withholds a
+balance the moment either fires.
 
-| attacker | verdict | mean conf | median t→BOT | jitter | Δ⁴/Δ² whiteness | RT floor |
-|---|---|---|---|---|---|---|
-| naive scripted (T0) | **BOT 100%** | 0.75 | 30 s | 0.00 px | 0.00 | 150 ms |
-| replay farm (T1, injected) | **BOT 100%** | 0.75 | 52 s | 1.82 px | 2.29 | 260 ms |
-| evasive generative (T2+) | BOT 17% | 0.33 | 80 s | 1.65 px | 1.76 | 236 ms |
-| **stealth camouflage (T3)** | **HUMAN** | **0.09** | **never** | 1.62 px | 1.77 | 274 ms |
+| attacker | verdict at 180 s | ever SUSPECT | ever BOT | mean conf | median t→BOT | jitter | Δ⁴/Δ² | RT floor |
+|---|---|---|---|---|---|---|---|---|
+| naive scripted (T0) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 30 s | 0.00 px | 0.00 | 150 ms |
+| replay farm (T1, injected) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 52 s | 1.82 px | 2.29 | 260 ms |
+| evasive generative (T2+) | BOT 17% | 9/12 | **5/12** | 0.33 | 80 s *(of the 5)* | 1.65 px | 1.76 | 236 ms |
+| **stealth camouflage (T3)** | **HUMAN 12/12** | 3/12 | **0/12** | **0.09** | never | 1.62 px | 1.77 | 274 ms |
+
+The two smoking-gun tiers skip SUSPECT entirely — escalation takes them straight
+to BOT. The evasive bot is the interesting middle: it *ends* the session called
+BOT on only 17% of seeds, but it touches BOT at some point on 42% and SUSPECT on
+75%, so reading the final verdict alone understates the detector by more than
+half. Its median 80 s time-to-BOT is a median over the five seeds that got
+there, not over all twelve.
 
 The naive bot is caught in seconds by kinematics (machine-clean swipes, jitter
 ≈ 0) and event provenance. The replay farm survives provenance blinding (its
@@ -87,14 +101,29 @@ swipe-level motor-forensics signal by modeling human motor noise correctly:
 | iid Gaussian (naive) | 2.21 | yes — injected noise is spectrally white |
 | pink 1/f + tremor + drift (organic) | 1.76 | **no** — indistinguishable from a band-limited human hand |
 
-The evasive bot still eventually trips **behavior texture** (it never enters
-contested space, so lookahead-verified play shows up over a few minutes → BOT on
-17% of seeds by 180 s). The **stealth** rung closes even that gap: it enters
-contested space on purpose and sometimes genuinely crashes for it, fakes
-aborted gestures, and gates its reaction times to threat onset with an
-ex-Gaussian sampler (a real lapse tail). It reads **HUMAN, confidence 0.09, and
-never flags as BOT across three sustained minutes and three seeds (the regression test;
-longer in manual runs).**
+The evasive bot still eventually trips **behavior texture** — it never enters
+contested space, so lookahead-verified play shows up over a few minutes. The
+**stealth** rung closes that gap: it enters contested space on purpose and
+sometimes genuinely crashes for it, fakes aborted gestures, and gates its
+reaction times to threat onset with an ex-Gaussian sampler (a real lapse tail).
+
+Run out to **10 minutes × 12 seeds**, the stealth attacker:
+
+- ends the session **HUMAN on 12/12 seeds**, mean confidence **0.06**
+- **never reaches BOT on any seed** — it is never actioned
+- but does **transiently trip SUSPECT on 3/12 seeds** (at 68 s, 75 s and 91 s),
+  falling back to HUMAN as more evidence accumulates
+
+So the honest headline is not "invisible". It is: *the detector never gets
+enough to act on, and on three seeds in twelve it gets just enough to ask a
+human to look.* Note the direction of travel — mean confidence **falls** from
+0.09 at 3 minutes to 0.06 at 10, because the session-level signals need volume
+and this attacker supplies human-shaped volume. Time is on the attacker's side.
+
+The residual grip is a single signal: on the seeds that flagged, it was
+"never enters contested space across N moves" — the stealth bot's deliberate
+risk-taking rate (0.7/min) is sometimes too low for the detector's window. An
+attacker who noticed that would raise it and pay a few more crashes.
 
 That is the ceiling of client-side behavioral detection. What survives it is not
 a better forensic signal — it is the economics.
@@ -123,7 +152,9 @@ the signal separates humans from a given attacker class at all.
    produce (zero deaths over dozens of dodges; metronomic margins).
 6. **Behavior texture** — session habits automation skips: aborted gestures,
    entering contested space and *paying* for it, actually banking runs. Catches
-   T2+; **defeated by T3**, which manufactures all three.
+   T2+; **mostly defeated by T3**, which manufactures all three — this is the
+   one signal that still lands on T3 at all, flagging on 3 of 12 seeds when its
+   contested-space rate happens to fall short of the detector's window.
 7. **Event integrity** — synthetic-event provenance (`isTrusted`), coordinate
    granularity. Cheap to spoof at the OS level, so corroborating only — it goes
    to zero the moment hardware injection is simulated.
@@ -151,14 +182,19 @@ and sd 3.8 pp** over 300 games each, against a binomial noise floor of 2.9 pp
 
 Sweeping the bot's win rate against that population:
 
-| bot win rate | EV / game | z-score | percentile | |
+| bot win rate | EV / game | z-score | players at or above (of 400) | |
 |---|---|---|---|---|
-| 55% | −\$0.60 | 1.3σ | 93.5 | loses money, invisible |
-| 60% | −\$0.20 | 2.6σ | 99.25 | still loses money |
-| **62.5%** | **\$0.00** | **3.3σ** | **99.5** | **break-even — already an outlier** |
-| 65% | +\$0.20 | 3.9σ | 99.75 | |
-| 70% | +\$0.60 | 5.2σ | 99.75 | |
-| 80% | +\$1.40 | 7.8σ | 100 | |
+| 55% | −\$0.60 | 1.3σ | 26 | loses money, invisible |
+| 60% | −\$0.20 | 2.6σ | 3 | still loses money |
+| **62.5%** | **\$0.00** | **3.3σ** | **2** | **break-even — already an outlier** |
+| 65% | +\$0.20 | 3.9σ | 1 | |
+| 70% | +\$0.60 | 5.2σ | 1 | |
+| 80% | +\$1.40 | 7.8σ | 0 | |
+
+(The last column is a raw count, not a percentile. An empirical percentile
+against a 400-player simulation has 0.25 pp resolution and pins at 100.00 the
+moment nobody beats the bot, which reads like false precision; the count says
+the same thing without pretending to more.)
 
 **There is no profitable-and-hidden zone.** The instant a bot clears the rake
 wall it is already a > 3σ outlier, and every extra dollar of profit pushes it
@@ -249,6 +285,14 @@ is ready and regenerates with a single command.
   demonstrates that the client-side signals are defeatable in principle by an
   attacker who models motor noise and reaction timing correctly; a real one
   would face device attestation this bench does not simulate.
+- **"Never actioned" is not "never noticed."** The stealth attacker trips the
+  SUSPECT review tier on 3 of 12 seeds. A defender who staffs a review queue —
+  rather than only auto-banning at the BOT tier — recovers some signal from
+  exactly those seeds. That is a real, if narrow, defensive foothold and the
+  measurement is reported rather than rounded away.
+- **Every attacker/detector number here is measured at 180 s or 600 s of a
+  single account.** Nothing in this bench models an attacker who tunes against
+  the detector over weeks, which is the realistic adversary.
 - **Collusion and multi-account farm fingerprinting are described, not built.**
 
 ---

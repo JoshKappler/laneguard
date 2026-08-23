@@ -14,20 +14,21 @@
     background-size: 48px 48px; opacity: 0.25; }
   .glow { position: absolute; width: 700px; height: 700px; right: -160px; top: -220px;
     background: radial-gradient(circle, rgba(61,220,255,0.14), transparent 62%); }
-  .wrap { position: relative; padding: 72px 80px; height: 100%; display: flex; flex-direction: column; }
-  .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 20px; letter-spacing: 0.28em;
-    text-transform: uppercase; color: #626d7a; margin-bottom: 26px; }
-  h1 { font-size: 92px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; }
+  .wrap { position: relative; padding: 64px 80px 60px; height: 100%; display: flex; flex-direction: column; }
+  .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 19px; letter-spacing: 0.28em;
+    text-transform: uppercase; color: #626d7a; margin-bottom: 24px; }
+  h1 { font-size: 96px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; }
   h1 .g { color: #3ddcff; }
-  p { font-size: 30px; line-height: 1.4; color: #9aa4b0; max-width: 20ch; margin-top: 26px; }
-  .row { margin-top: auto; display: flex; gap: 14px; align-items: stretch; }
-  .chip { border: 1px solid #22262c; border-radius: 6px; padding: 16px 22px; background: #121417;
-    font-family: "IBM Plex Mono", monospace; }
-  .chip .lab { font-size: 15px; color: #626d7a; letter-spacing: 0.1em; text-transform: uppercase; }
-  .chip .val { font-size: 30px; font-variant-numeric: tabular-nums; margin-top: 6px; letter-spacing: -0.01em; }
-  .human { color: #35c46b; } .bad { color: #f0555e; } .warn { color: #e8a93b; } .acc { color: #3ddcff; }
-  .foot { position: absolute; right: 80px; bottom: 74px; font-family: "IBM Plex Mono", monospace;
-    font-size: 18px; color: #626d7a; text-align: right; line-height: 1.5; }
+  /* wide enough to break where the sentence breaks, not mid-clause */
+  p { font-size: 36px; line-height: 1.32; color: #9aa4b0; max-width: 660px; margin-top: 28px; }
+  .foot { font-family: "IBM Plex Mono", monospace; font-size: 17px; color: #626d7a;
+    margin-top: auto; margin-bottom: 18px; }
+  .row { display: flex; gap: 14px; align-items: stretch; }
+  .chip { border: 1px solid #22262c; border-radius: 6px; padding: 14px 20px; background: #121417;
+    font-family: "IBM Plex Mono", monospace; white-space: nowrap; }
+  .chip .lab { font-size: 14px; color: #626d7a; letter-spacing: 0.1em; text-transform: uppercase; }
+  .chip .val { font-size: 27px; font-variant-numeric: tabular-nums; margin-top: 7px; letter-spacing: -0.01em; }
+  .human { color: #35c46b; } .bad { color: #f0555e; } .acc { color: #3ddcff; }
 </style>
 </head>
 <body>
@@ -36,14 +37,12 @@
   <div class="wrap">
     <div class="eyebrow">Behavioral anti-cheat · test bench</div>
     <h1>LANE<span class="g">GUARD</span></h1>
-    <p>Where a bot beats the detector — and the economics catch it anyway.</p>
+    <p>The client-side detector loses. The economics don&rsquo;t.</p>
+    <div class="foot">an original simulation built from public screenshots &middot; no access to any real app</div>
     <div class="row">
-      <div class="chip"><div class="lab">stealth bot</div><div class="val human">HUMAN 0.09</div></div>
-      <div class="chip"><div class="lab">break-even bot</div><div class="val bad">3.3σ outlier</div></div>
-      <div class="chip"><div class="lab">signals</div><div class="val acc">7 · ROC-ready</div></div>
-      <div class="chip" style="margin-left:auto; display:flex; flex-direction:column; justify-content:center; text-align:right;">
-        <div class="lab">original simulation</div><div class="val" style="font-size:20px; color:#9aa4b0;">no access to any real app</div>
-      </div>
+      <div class="chip"><div class="lab">stealth bot &middot; 10 min &times; 12 seeds</div><div class="val human">reads HUMAN 12/12</div></div>
+      <div class="chip"><div class="lab">break-even bot</div><div class="val bad">3.3&sigma; outlier</div></div>
+      <div class="chip"><div class="lab">signals</div><div class="val acc">7 &middot; ROC-ready</div></div>
     </div>
   </div>
 </body>

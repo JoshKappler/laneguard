@@ -17,7 +17,16 @@ function clock(ms: number) {
   return "T+" + String(m).padStart(2, "0") + ":" + (s % 60).toFixed(3).padStart(6, "0");
 }
 
-export function EventLog({ controller, version }: { controller: BenchController | null; version: number }) {
+export function EventLog({
+  controller,
+  version,
+  grow,
+}: {
+  controller: BenchController | null;
+  version: number;
+  /** absorb the column's leftover height instead of pinning a fixed one */
+  grow?: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
@@ -25,14 +34,31 @@ export function EventLog({ controller, version }: { controller: BenchController 
 
   const entries = controller?.log ?? [];
   return (
-    <section className="panel">
+    <section
+      className="panel"
+      style={grow ? { flex: 1, minHeight: 220, display: "flex", flexDirection: "column" } : undefined}
+    >
       <div className="panel-head"><h2>Event log</h2><span className="mono sub">{controller?.clock() ?? ""}</span></div>
-      <div className="panel-body" style={{ padding: 0 }}>
+      <div
+        className="panel-body"
+        style={{
+          padding: 0,
+          // column, so the scroller's flex/height:0 works on the vertical axis
+          ...(grow ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" as const } : {}),
+          // the scroller cuts the topmost line mid-glyph; fade it out rather
+          // than leaving a sliced row under the header
+          maskImage: "linear-gradient(to bottom, transparent 0, #000 10px)",
+          WebkitMaskImage: "linear-gradient(to bottom, transparent 0, #000 10px)",
+        }}
+      >
         <div
           ref={ref}
           className="mono"
           style={{
-            height: 340,
+            // height:0 + grow, not minHeight:0 — otherwise the scroller's
+            // content height leaks into intrinsic sizing and an auto grid row
+            // resolves to the full length of the log
+            ...(grow ? { flex: "1 1 0", height: 0 } : { height: 340 }),
             overflowY: "auto",
             fontSize: 11,
             lineHeight: 1.55,

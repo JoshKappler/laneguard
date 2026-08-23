@@ -30,7 +30,16 @@ export interface PopulationResult {
   noise: number;
   nGames: number;
   botWR: number;
+  /**
+   * Empirical percentile of the bot against the simulated population. Its
+   * resolution is 1/nPlayers, so it saturates at 100 as soon as nobody beats
+   * the bot — read it together with `above`/`nRated` rather than alone.
+   */
   pctile: number;
+  /** how many simulated players matched or beat the bot's win rate */
+  above: number;
+  /** how many players had enough games to be rated (the pctile denominator) */
+  nRated: number;
 }
 
 export function simulatePopulation(p: PopulationParams): PopulationResult {
@@ -77,5 +86,7 @@ export function simulatePopulation(p: PopulationParams): PopulationResult {
     nGames,
     botWR,
     pctile: 100 * (1 - above / rates.length),
+    above,
+    nRated: rates.length,
   };
 }

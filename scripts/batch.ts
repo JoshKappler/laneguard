@@ -32,11 +32,17 @@ interface ProfileAgg {
   label: string;
   seeds: number;
   durationS: number;
+  /** verdict at the end of the session */
   botRate: number;
-  flaggedRate: number; // SUSPECT or BOT
+  flaggedRate: number; // SUSPECT or BOT at the end
+  /** reached the tier at ANY point in the session, not just at the end */
+  everBotRate: number;
+  everSuspectRate: number;
   meanOverall: number;
   medianFirstFlagS: number | null;
+  /** median over the seeds that reached BOT at all — see everBotRate for how many */
   medianFirstBotS: number | null;
+  medianFirstSuspectS: number | null;
   meanJitter: number | null;
   meanWhite: number | null;
   meanRtMin: number | null;
@@ -63,6 +69,7 @@ function runProfile(
   const finals = [];
   const firstFlags: (number | null)[] = [];
   const firstBots: (number | null)[] = [];
+  const firstSuspects: (number | null)[] = [];
   for (let s = 0; s < argSeeds; s++) {
     const seed = 1000 + s * 7;
     const cfg = mergeConfig(DEFAULT_CONFIG, { ...over, seed });
@@ -70,6 +77,7 @@ function runProfile(
     finals.push(r);
     firstFlags.push(r.firstFlagS);
     firstBots.push(r.firstBotS);
+    firstSuspects.push(r.firstSuspectS);
   }
   const sigNames = Object.keys(finals[0].final.signals);
   const signalMeans: Record<string, number> = {};
@@ -88,9 +96,12 @@ function runProfile(
     durationS,
     botRate: botCount / finals.length,
     flaggedRate: flagCount / finals.length,
+    everBotRate: firstBots.filter((x) => x !== null).length / finals.length,
+    everSuspectRate: firstSuspects.filter((x) => x !== null).length / finals.length,
     meanOverall: mean(finals.map((r) => r.final.overall)),
     medianFirstFlagS: median(firstFlags),
     medianFirstBotS: median(firstBots),
+    medianFirstSuspectS: median(firstSuspects),
     meanJitter: mean(
       finals.map((r) => r.final.featureStats.meanJitter).filter((x): x is number => x !== null)
     ),
@@ -116,16 +127,39 @@ const profiles = PRESETS.filter((p) => p.id !== "phone-farm-scale").map((p) =>
   runProfile(p.id, p.label, p.config, DURATION_S)
 );
 
+/*
+ * Two different questions, reported separately because they give different
+ * numbers and only one of them is the enforcement question:
+ *   "final verdict"  — what the detector says at t = durationS
+ *   "ever reached"   — whether the tier was ever hit during the session, which
+ *                      is what actually matters when SUSPECT queues a review
+ *                      and BOT withholds a balance
+ * t→BOT is a median over only the seeds that got there; the seed count is
+ * printed beside it so it is never read as a population median.
+ */
+const pct = (x: number) => `${Math.round(x * 100)}%`;
+const ofN = (rate: number) => Math.round(rate * argSeeds);
+
 console.log(`\n# Attacker detection — ${argSeeds} seeds × ${DURATION_S}s each\n`);
 console.log(
-  "| profile | verdict rate | mean conf | median t→flag | median t→BOT | jitter | Δ⁴/Δ² | RT min |"
+  "| profile | final verdict | ever SUSPECT | ever BOT | mean conf | median t→BOT (of those) | jitter | Δ⁴/Δ² | RT min |"
 );
-console.log("|---|---|---|---|---|---|---|---|");
+console.log("|---|---|---|---|---|---|---|---|---|");
 for (const p of profiles) {
   const verdict =
-    p.botRate === 1 ? "BOT 100%" : p.botRate > 0 ? `BOT ${(p.botRate * 100).toFixed(0)}%` : p.flaggedRate > 0 ? `SUSPECT ${(p.flaggedRate * 100).toFixed(0)}%` : "HUMAN";
+    p.botRate === 1
+      ? "BOT 100%"
+      : p.botRate > 0
+        ? `BOT ${pct(p.botRate)}`
+        : p.flaggedRate > 0
+          ? `SUSPECT ${pct(p.flaggedRate)}`
+          : "HUMAN";
+  const tBot =
+    p.medianFirstBotS === null
+      ? "never"
+      : `${fmt(p.medianFirstBotS, 0)}s (n=${ofN(p.everBotRate)})`;
   console.log(
-    `| ${p.label} | ${verdict} | ${fmt(p.meanOverall)} | ${fmt(p.medianFirstFlagS, 0)}s | ${p.medianFirstBotS === null ? "never" : fmt(p.medianFirstBotS, 0) + "s"} | ${fmt(p.meanJitter)}px | ${fmt(p.meanWhite)} | ${fmt(p.meanRtMin, 0)}ms |`
+    `| ${p.label} | ${verdict} | ${ofN(p.everSuspectRate)}/${argSeeds} | ${ofN(p.everBotRate)}/${argSeeds} | ${fmt(p.meanOverall)} | ${tBot} | ${fmt(p.meanJitter)}px | ${fmt(p.meanWhite)} | ${fmt(p.meanRtMin, 0)}ms |`
   );
 }
 
@@ -133,7 +167,10 @@ for (const p of profiles) {
 console.log(`\n# Economy sweep ($${DEFAULT_CONFIG.econ.entry} entry, ${(DEFAULT_CONFIG.econ.rake * 100).toFixed(0)}% rake)\n`);
 const be = breakEven(DEFAULT_CONFIG.econ.entry, DEFAULT_CONFIG.econ.rake);
 console.log(`break-even win rate: ${(be * 100).toFixed(1)}%\n`);
-console.log("| bot win rate | EV/game | z-score | percentile |");
+// The empirical percentile has 1/nPlayers resolution and pins at 100 the
+// moment nobody in the simulated population beats the bot, so report the raw
+// "players at or above" count instead of a saturating percentile.
+console.log("| bot win rate | EV/game | z-score | players at or above |");
 console.log("|---|---|---|---|");
 const econRows = [];
 for (const wr of [0.55, 0.6, 0.625, 0.65, 0.7, 0.8]) {
@@ -143,9 +180,9 @@ for (const wr of [0.55, 0.6, 0.625, 0.65, 0.7, 0.8]) {
     botWR: wr,
   });
   const ev = evPerGame(wr, DEFAULT_CONFIG.econ.entry, DEFAULT_CONFIG.econ.rake);
-  econRows.push({ wr, ev, z: s.z, pctile: s.pctile, mean: s.mean, sd: s.sd });
+  econRows.push({ wr, ev, z: s.z, pctile: s.pctile, above: s.above, nRated: s.nRated, mean: s.mean, sd: s.sd });
   console.log(
-    `| ${(wr * 100).toFixed(1)}% | ${ev >= 0 ? "+" : ""}$${ev.toFixed(2)} | ${s.z.toFixed(1)}σ | ${s.pctile.toFixed(2)} |`
+    `| ${(wr * 100).toFixed(1)}% | ${ev >= 0 ? "+" : ""}$${ev.toFixed(2)} | ${s.z.toFixed(1)}σ | ${s.above} / ${s.nRated} |`
   );
 }
 

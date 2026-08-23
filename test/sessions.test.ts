@@ -12,8 +12,11 @@ import { DEFAULT_CONFIG, mergeConfig, type DeepPartial, type BenchConfig } from 
  *   generative iid  -> caught (noise character: injected noise is white)
  *   generative organic -> beats every swipe-level signal forever, but session
  *                      texture + the RT-floor artifact catch it in minutes
- *   stealth camouflage -> beats the ENTIRE client-side detector indefinitely
- *                      (this is the honest thesis: it must stay HUMAN)
+ *   stealth camouflage -> never ACTIONED by the client-side detector: ends
+ *                      HUMAN and never reaches BOT. It does transiently reach
+ *                      SUSPECT on a minority of seeds, and that is pinned below
+ *                      too — the honest thesis is "never actioned", not
+ *                      "never noticed", and neither half may silently drift.
  */
 
 const mk = (over: DeepPartial<BenchConfig>, seed = 1337) =>
@@ -113,7 +116,7 @@ describe("stealth camouflage bot (the new rung)", () => {
   // 180 s per seed keeps each synchronous session under vitest's worker-RPC
   // window; the yield between seeds lets the worker heartbeat. 3 minutes is well
   // past the ~80 s where the (non-stealth) evasive bot gets caught by texture.
-  test("beats the entire client-side detector across 3 sustained minutes (3 seeds)", { timeout: 60000 }, async () => {
+  test("is never actioned by the client-side detector across 3 sustained minutes (3 seeds)", { timeout: 60000 }, async () => {
     for (const seed of [1337, 7, 99]) {
       const r = run(over, 180, seed);
       expect(r.final.ready).toBe(true);
@@ -122,6 +125,25 @@ describe("stealth camouflage bot (the new rung)", () => {
       expect(r.firstBotS).toBeNull();
       await new Promise((res) => setTimeout(res, 0));
     }
+  });
+
+  // The other half of the honest claim. Across the batch seeds the stealth bot
+  // ends HUMAN 12/12 and reaches BOT 0/12, but does touch SUSPECT on 3/12. If a
+  // future change silently drove that to 0 the docs would be overclaiming, and
+  // if it drove it up the "never actioned" thesis would be weakening — pin both
+  // ends. Seeds match scripts/batch.ts so the number is the documented one.
+  test("touches SUSPECT on a minority of seeds but never BOT (batch seeds)", { timeout: 90000 }, async () => {
+    let suspect = 0;
+    let human = 0;
+    for (let s = 0; s < 12; s++) {
+      const r = runSession({ config: mk(over, 1000 + s * 7), durationS: 180 });
+      if (r.firstSuspectS !== null) suspect++;
+      if (r.final.verdict === "HUMAN") human++;
+      expect(r.firstBotS).toBeNull();
+      await new Promise((res) => setTimeout(res, 0));
+    }
+    expect(human).toBe(12);
+    expect(suspect).toBe(3);
   });
 
   test("camouflage behaviors actually happen and cost something (seed 1337)", { timeout: 30000 }, () => {

@@ -54,8 +54,16 @@ export function GameCanvas({ controller }: { controller: BenchController | null 
       width={400}
       height={860}
       style={{
-        width: "100%",
-        maxWidth: 400,
+        // Replaced-element sizing: intrinsic 400x860 clamped by both maxes, so
+        // it scales down preserving aspect and never pins the grid row to 860.
+        // --game-max-h is set per breakpoint so the game column stays close to
+        // the height of whatever sits beside it. The renderer keeps drawing in
+        // 400x860 space and pointer coords are normalized against the rect.
+        width: "auto",
+        height: "auto",
+        maxWidth: "100%",
+        maxHeight: "var(--game-max-h, 860px)",
+        margin: "auto",
         border: "1px solid var(--line)",
         borderRadius: 20,
         touchAction: "none",
