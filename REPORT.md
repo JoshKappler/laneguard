@@ -107,18 +107,28 @@ contested space, so lookahead-verified play shows up over a few minutes. The
 sometimes genuinely crashes for it, fakes aborted gestures, and gates its
 reaction times to threat onset with an ex-Gaussian sampler (a real lapse tail).
 
-Run out to **10 minutes × 12 seeds**, the stealth attacker:
+Three minutes is not long enough to separate those two claims, so run both out
+to **10 minutes × 12 seeds** (`pnpm batch --duration 600`) and compare them on
+equal terms:
 
-- ends the session **HUMAN on 12/12 seeds**, mean confidence **0.06**
-- **never reaches BOT on any seed** — it is never actioned
-- but does **transiently trip SUSPECT on 3/12 seeds** (at 68 s, 75 s and 91 s),
-  falling back to HUMAN as more evidence accumulates
+| attacker | verdict at 600 s | ever SUSPECT | ever BOT | mean conf | median t→BOT |
+|---|---|---|---|---|---|
+| evasive generative (T2+) | **BOT 83%** | 9/12 | **10/12** | 0.58 | 141 s *(of the 10)* |
+| **stealth camouflage (T3)** | **HUMAN 12/12** | 3/12 | **0/12** | **0.06** | never |
 
-So the honest headline is not "invisible". It is: *the detector never gets
-enough to act on, and on three seeds in twelve it gets just enough to ask a
-human to look.* Note the direction of travel — mean confidence **falls** from
-0.09 at 3 minutes to 0.06 at 10, because the session-level signals need volume
-and this attacker supplies human-shaped volume. Time is on the attacker's side.
+This is the result worth reading. Given enough time the detector *does* win
+against the evasive bot — 5/12 at three minutes becomes 10/12 at ten, because
+behavior texture accumulates. The stealth rung is what breaks that trend: it
+sits at 0/12 no matter how long the session runs, and its confidence **falls**
+from 0.09 at three minutes to 0.06 at ten, because the session-level signals
+need volume and this attacker supplies human-shaped volume. Against everything
+below T3 time is the defender's ally; at T3 it changes sides.
+
+The stealth attacker does still **transiently trip SUSPECT on 3/12 seeds** (at
+68 s, 75 s and 91 s), falling back to HUMAN as more evidence accumulates. So the
+honest headline is not "invisible". It is: *the detector never gets enough to
+act on, and on three seeds in twelve it gets just enough to ask a human to
+look.*
 
 The residual grip is a single signal: on the seeds that flagged, it was
 "never enters contested space across N moves" — the stealth bot's deliberate

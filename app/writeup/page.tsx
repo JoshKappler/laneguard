@@ -189,21 +189,36 @@ export default function Writeup() {
         enters contested space and lookahead-verified play eventually shows. The stealth rung closes
         that gap: it enters contested space on purpose and sometimes genuinely crashes for it, fakes
         aborted gestures, and gates its reaction times to threat onset with an ex-Gaussian sampler
-        that has a real lapse tail. Held out to <strong>10 minutes across 12 seeds</strong>, it ends
-        HUMAN on <strong>12/12</strong> at mean confidence <strong>0.06</strong> and reaches BOT on{" "}
-        <strong>none</strong> — but it does transiently trip the SUSPECT review tier on 3 of those 12
-        (at 68, 75 and 91&nbsp;s) before falling back.
+        that has a real lapse tail.
       </P>
       <P>
-        So the honest statement is not that the bot is invisible. It is that the detector never gets
-        enough to act on, and occasionally gets just enough to ask a human to look. Note the
-        direction of travel: confidence <em>falls</em> from 0.09 at three minutes to 0.06 at ten,
-        because the session-level signals need volume and this attacker supplies human-shaped volume.
-        Time is on the attacker&apos;s side. The one residual grip is a single signal — on the seeds
-        that flagged, it was &ldquo;never enters contested space&rdquo;, meaning the bot&apos;s
-        deliberate risk rate of 0.7/min was sometimes short of the detector&apos;s window. An
-        attacker who noticed would raise it and pay a few more crashes. That is the ceiling of
-        client-side behavioral detection.
+        Three minutes is not long enough to separate those two attackers, so run both out to{" "}
+        <strong>10 minutes across 12 seeds</strong> and compare them on equal terms:
+      </P>
+      <Table
+        head={["attacker", "verdict @600s", "ever SUSP", "ever BOT", "conf", "t→BOT"]}
+        rows={[
+          ["evasive generative", "BOT 83%", "9/12", "10/12", "0.58", "141 s"],
+          ["stealth camouflage", "HUMAN 12/12", "3/12", "0/12", "0.06", "never"],
+        ]}
+        hot={(r, c) => r === 1 && c === 3}
+      />
+      <P>
+        This is the result worth reading. Given enough time the detector <em>does</em> win against
+        the evasive bot — 5/12 seeds at three minutes becomes 10/12 at ten, because behavior texture
+        accumulates. The stealth rung is what breaks that trend: 0/12 however long the session runs,
+        and its confidence <em>falls</em> from 0.09 at three minutes to 0.06 at ten, because the
+        session-level signals need volume and this attacker supplies human-shaped volume. Below T3,
+        time is the defender&apos;s ally; at T3 it changes sides.
+      </P>
+      <P>
+        It does still transiently trip the SUSPECT review tier on 3 of those 12 seeds (at 68, 75 and
+        91&nbsp;s) before falling back, so the honest statement is not that the bot is invisible — it
+        is that the detector never gets enough to act on, and occasionally gets just enough to ask a
+        human to look. The one residual grip is a single signal: on the seeds that flagged it was
+        &ldquo;never enters contested space&rdquo;, meaning the bot&apos;s deliberate risk rate of
+        0.7/min was sometimes short of the detector&apos;s window. An attacker who noticed would
+        raise it and pay a few more crashes. That is the ceiling of client-side behavioral detection.
       </P>
 
       <H n="03">The seven signals</H>

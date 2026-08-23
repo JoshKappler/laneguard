@@ -61,11 +61,21 @@ matters.
 
 The stealth bot uses organic motor noise (pink 1/f + tremor + drift), ex-Gaussian
 reaction times gated to threat onset, and deliberate imperfect play (it enters
-contested space and genuinely crashes for it, and fakes aborted gestures). Held
-out to **10 minutes × 12 seeds** it still ends HUMAN on every seed at mean
-confidence 0.06 and never reaches BOT — but it does transiently trip the SUSPECT
-review tier on 3/12 seeds, and the writeup says so rather than rounding it off.
-Keeping that honest is the point.
+contested space and genuinely crashes for it, and fakes aborted gestures).
+
+Three minutes doesn't separate the last two rungs, so run both to 10 minutes
+(`pnpm batch --duration 600`):
+
+| attacker | verdict at 600 s | ever SUSPECT | ever BOT | mean conf |
+|---|---|---|---|---|
+| evasive generative | **BOT 83%** | 9/12 | **10/12** | 0.58 |
+| **stealth camouflage** | **HUMAN 12/12** | 3/12 | **0/12** | **0.06** |
+
+Given time the detector *does* win against the evasive bot (5/12 seeds at three
+minutes → 10/12 at ten). The stealth rung breaks that trend — 0/12 however long
+it runs, with confidence falling as the session grows. It does transiently trip
+the SUSPECT review tier on 3/12 seeds, and the writeup says so rather than
+rounding it off. Keeping that honest is the point.
 
 ## Why the economy wins
 
