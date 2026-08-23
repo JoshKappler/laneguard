@@ -1,0 +1,264 @@
+/*
+ * LaneGuard — "Bench Instrument" design system.
+ * Dark-first graphite with one interaction accent (instrument cyan). Chroma is
+ * reserved for verdict/status; the accent never means a verdict. Hairline-only
+ * separation, tabular numerals everywhere, weights capped at 600.
+ */
+
+:root {
+  /* surfaces */
+  --bg: #0b0c0e;
+  --surface: #121417;
+  --surface-2: #171a1e;
+  --line: #22262c;
+  --line-strong: #313841;
+
+  /* ink ladder (single hue at declining alpha) */
+  --ink: #e6eaef;
+  --ink-2: #9aa4b0;
+  --ink-3: #626d7a;
+  --ink-4: #3f4753;
+
+  /* accent — interaction only */
+  --accent: #3ddcff;
+  --accent-dim: #0e4f60;
+  --accent-ink: #06222b;
+
+  /* verdict / status */
+  --ok: #35c46b;
+  --warn: #e8a93b;
+  --bad: #f0555e;
+  --ok-bg: rgba(53, 196, 107, 0.12);
+  --warn-bg: rgba(232, 169, 59, 0.12);
+  --bad-bg: rgba(240, 85, 94, 0.14);
+  --ok-line: rgba(53, 196, 107, 0.4);
+  --warn-line: rgba(232, 169, 59, 0.4);
+  --bad-line: rgba(240, 85, 94, 0.45);
+
+  /* chart neutrals (derived from accent + greys; semantic hues stay reserved) */
+  --series-1: #3ddcff;
+  --series-2: #6fa8c4;
+  --series-3: #8e9aa8;
+  --series-4: #626d7a;
+
+  /* geometry */
+  --r-panel: 4px;
+  --r-chip: 2px;
+  --pad: 16px;
+  --gap: 14px;
+  --shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+
+  --font-sans: var(--font-plex-sans), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+  --font-serif: var(--font-plex-serif), Georgia, serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-synthesis-weight: none;
+  font-feature-settings: "tnum" 1;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.35;
+  font-size: 14px;
+}
+
+h1, h2, h3, h4 {
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* numbers, labels, code, log — mono everywhere for chrome */
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* a section eyebrow: mono, tracked, dim (borrowed discipline: numbered labels) */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* panels */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.panel-head h2 {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.panel-head .sub {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.panel-body {
+  padding: 14px;
+}
+
+/* scrollbars — 1px, unobtrusive */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* buttons */
+button {
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  padding: 6px 11px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s,
+    background 0.15s;
+}
+button:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(61, 220, 255, 0.06);
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+label.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+label.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+input[type="range"] {
+  accent-color: var(--accent);
+  width: 100%;
+}
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+}
+input[type="number"],
+input[type="text"],
+select {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  padding: 5px 8px;
+}
+input:focus,
+select:focus,
+button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* verdict badge */
+.badge {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  padding: 4px 10px;
+  border-radius: var(--r-chip);
+  border: 1px solid var(--line);
+}
+.badge.human { color: var(--ok); background: var(--ok-bg); border-color: var(--ok-line); }
+.badge.suspect { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-line); }
+.badge.bot { color: var(--bad); background: var(--bad-bg); border-color: var(--bad-line); }
+.badge.na { color: var(--ink-3); background: var(--surface-2); }
+
+/* key/value tables */
+.kv {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 3px 14px;
+  align-content: start;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.kv .k { color: var(--ink-3); }
+.kv .v { color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.kv .v.hot { color: var(--bad); }
+.kv .v.good { color: var(--ok); }
+
+/* utility */
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.col { display: flex; flex-direction: column; }
+.muted { color: var(--ink-3); }
+.tiny { font-size: 11px; }
