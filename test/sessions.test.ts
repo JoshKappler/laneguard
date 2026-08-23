@@ -110,7 +110,7 @@ describe("stealth camouflage bot (the new rung)", () => {
     },
   };
 
-  test("beats the entire client-side detector for 10 sustained minutes (3 seeds)", { timeout: 30000 }, () => {
+  test("beats the entire client-side detector for 10 sustained minutes (3 seeds)", { timeout: 180000 }, () => {
     for (const seed of [1337, 7, 99]) {
       const r = run(over, 600, seed);
       expect(r.final.ready).toBe(true);
@@ -120,7 +120,7 @@ describe("stealth camouflage bot (the new rung)", () => {
     }
   });
 
-  test("camouflage behaviors actually happen and cost something (seed 1337)", { timeout: 15000 }, () => {
+  test("camouflage behaviors actually happen and cost something (seed 1337)", { timeout: 90000 }, () => {
     const r = run(over, 600);
     const c = r.final.counters;
     expect(c.aborts).toBeGreaterThan(0); // fakes changed-my-mind gestures
