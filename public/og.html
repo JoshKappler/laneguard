@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  * { margin: 0; box-sizing: border-box; }
+  body { width: 1200px; height: 630px; background: #0b0c0e; color: #e6eaef;
+    font-family: "IBM Plex Sans", sans-serif; overflow: hidden; position: relative; }
+  .grid { position: absolute; inset: 0;
+    background-image: linear-gradient(#22262c 1px, transparent 1px), linear-gradient(90deg, #22262c 1px, transparent 1px);
+    background-size: 48px 48px; opacity: 0.25; }
+  .glow { position: absolute; width: 700px; height: 700px; right: -160px; top: -220px;
+    background: radial-gradient(circle, rgba(61,220,255,0.14), transparent 62%); }
+  .wrap { position: relative; padding: 72px 80px; height: 100%; display: flex; flex-direction: column; }
+  .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 20px; letter-spacing: 0.28em;
+    text-transform: uppercase; color: #626d7a; margin-bottom: 26px; }
+  h1 { font-size: 92px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; }
+  h1 .g { color: #3ddcff; }
+  p { font-size: 30px; line-height: 1.4; color: #9aa4b0; max-width: 20ch; margin-top: 26px; }
+  .row { margin-top: auto; display: flex; gap: 14px; align-items: stretch; }
+  .chip { border: 1px solid #22262c; border-radius: 6px; padding: 16px 22px; background: #121417;
+    font-family: "IBM Plex Mono", monospace; }
+  .chip .lab { font-size: 15px; color: #626d7a; letter-spacing: 0.1em; text-transform: uppercase; }
+  .chip .val { font-size: 30px; font-variant-numeric: tabular-nums; margin-top: 6px; letter-spacing: -0.01em; }
+  .human { color: #35c46b; } .bad { color: #f0555e; } .warn { color: #e8a93b; } .acc { color: #3ddcff; }
+  .foot { position: absolute; right: 80px; bottom: 74px; font-family: "IBM Plex Mono", monospace;
+    font-size: 18px; color: #626d7a; text-align: right; line-height: 1.5; }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="glow"></div>
+  <div class="wrap">
+    <div class="eyebrow">Behavioral anti-cheat · test bench</div>
+    <h1>LANE<span class="g">GUARD</span></h1>
+    <p>Where a bot beats the detector — and the economics catch it anyway.</p>
+    <div class="row">
+      <div class="chip"><div class="lab">stealth bot</div><div class="val human">HUMAN 0.09</div></div>
+      <div class="chip"><div class="lab">break-even bot</div><div class="val bad">3.3σ outlier</div></div>
+      <div class="chip"><div class="lab">signals</div><div class="val acc">7 · ROC-ready</div></div>
+      <div class="chip" style="margin-left:auto; display:flex; flex-direction:column; justify-content:center; text-align:right;">
+        <div class="lab">original simulation</div><div class="val" style="font-size:20px; color:#9aa4b0;">no access to any real app</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
