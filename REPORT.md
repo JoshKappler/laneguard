@@ -81,7 +81,7 @@ balance the moment either fires.
 | naive scripted (T0) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 30 s | 0.00 px | 0.00 | 150 ms |
 | replay farm (T1, injected) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 52 s | 1.82 px | 2.29 | 260 ms |
 | evasive generative (T2+) | BOT 17% | 9/12 | **5/12** | 0.33 | 80 s *(of the 5)* | 1.65 px | 1.76 | 236 ms |
-| **stealth camouflage (T3)** | **HUMAN 12/12** | 3/12 | **0/12** | **0.09** | never | 1.62 px | 1.77 | 274 ms |
+| **stealth camouflage (T3)** | **HUMAN 12/12** | 2/12 | **0/12** | **0.06** | never | 1.62 px | 1.75 | 251 ms |
 
 The two smoking-gun tiers skip SUSPECT entirely — escalation takes them straight
 to BOT. The evasive bot is the interesting middle: it *ends* the session called
@@ -114,21 +114,20 @@ equal terms:
 | attacker | verdict at 600 s | ever SUSPECT | ever BOT | mean conf | median t→BOT |
 |---|---|---|---|---|---|
 | evasive generative (T2+) | **BOT 83%** | 9/12 | **10/12** | 0.58 | 141 s *(of the 10)* |
-| **stealth camouflage (T3)** | **HUMAN 12/12** | 3/12 | **0/12** | **0.06** | never |
+| **stealth camouflage (T3)** | **HUMAN 12/12** | 2/12 | **0/12** | **0.04** | never |
 
 This is the result worth reading. Given enough time the detector *does* win
 against the evasive bot — 5/12 at three minutes becomes 10/12 at ten, because
 behavior texture accumulates. The stealth rung is what breaks that trend: it
 sits at 0/12 no matter how long the session runs, and its confidence **falls**
-from 0.09 at three minutes to 0.06 at ten, because the session-level signals
+from 0.06 at three minutes to 0.04 at ten, because the session-level signals
 need volume and this attacker supplies human-shaped volume. Against everything
 below T3 time is the defender's ally; at T3 it changes sides.
 
-The stealth attacker does still **transiently trip SUSPECT on 3/12 seeds** (at
-68 s, 75 s and 91 s), falling back to HUMAN as more evidence accumulates. So the
+The stealth attacker does still **transiently trip SUSPECT on 2/12 seeds** (at
+67 s and 73 s), falling back to HUMAN as more evidence accumulates. So the
 honest headline is not "invisible". It is: *the detector never gets enough to
-act on, and on three seeds in twelve it gets just enough to ask a human to
-look.*
+act on, and on two seeds in twelve it gets just enough to ask a human to look.*
 
 The residual grip is a single signal: on the seeds that flagged, it was
 "never enters contested space across N moves" — the stealth bot's deliberate
@@ -206,18 +205,109 @@ against a 400-player simulation has 0.25 pp resolution and pins at 100.00 the
 moment nobody beats the bot, which reads like false precision; the count says
 the same thing without pretending to more.)
 
-**There is no profitable-and-hidden zone.** The instant a bot clears the rake
-wall it is already a > 3σ outlier, and every extra dollar of profit pushes it
-further out. Throttling the win rate to look human pushes it below break-even,
-where botting stops making money. This survives the T3 attacker that defeats
-every forensic signal above, because it is enforced by the rake, not by
-forensics — the one thing the attacker cannot fake without giving up the profit
-motive.
+Read that table for what it is: **arithmetic conditional on a win rate, not a
+measurement of one.** It answers "if an account sustained 70%, how loud would it
+be" — it does not establish that any attacker can reach 70%. The next section
+stops assuming and measures it.
 
 **The corollary for detection design:** rank accounts by win-rate z-score
 against the skill-matched population, then use the behavioral signals as
 corroboration before acting. That ordering keeps false-positive bans near zero,
 which is the whole game when a ban means withholding a cash balance.
+
+### 5a. Measuring the win rate instead of assuming it
+
+The sweep above has a hole an attacker could drive through: `botWR` is a knob. So
+the bench also plays the matches. `pnpm evo` puts the attacker and a modeled
+field into head-to-head games and lets the win rate *emerge* from play —
+**1,196,000 simulated runs** across 5 fields × 160 players × 1,000 shared
+courses, and 99 attacker policies × 4 independent seeds.
+
+Both players in a match drive the **same seeded course**. That is exact, not
+approximate: the wave sequence is a pure function of the world RNG and elapsed
+run time, and nothing a player does feeds back into what spawns (asserted in
+`test/headtohead.test.ts` by driving one engine all over the road and diffing its
+spawn stream against a passive one frame by frame). So one run per
+(player, course) yields every pairwise result, which is what makes a study this
+size cost a minute of wall-clock.
+
+Three things had to be swept rather than chosen, because each one on its own can
+decide the answer:
+
+- **How competent the field is.** An attacker's edge is bounded by how badly the
+  opposition plays. Fields run from `casual` (slow, greedy, banks 32% of runs) to
+  `sharp` (fast, banks 52%).
+- **What decides a match.** Public material does not settle whether a crashed run
+  scores nothing (`banked`, a head-to-head pot you must bank to register) or still
+  counts its score (`score`, a leaderboard). Both are measured.
+- **How double-forfeits settle.** On this difficulty most matches end with
+  *neither* player banking, so the tie rule is not a billing detail: `refund`
+  returns entries, `split` pays the raked pot back (−$1 each), `loss` keeps both.
+
+The attacker's measured ceiling — the best win rate any of the 99 policies reached:
+
+| field | `banked` rule | `score` rule |
+|---|---|---|
+| casual | 64.0% (4.9σ) | 58.5% (1.0σ) |
+| typical | 59.3% (3.4σ) | 60.8% (1.2σ) |
+| learned | 56.9% (2.2σ) | 67.5% (1.7σ) |
+| sharp | **56.5% (2.0σ)** | 71.0% (2.1σ) |
+| grinder | 58.9% (5.4σ) | **52.0% (0.4σ)** |
+
+The bolded cell in each column is the one to quote, and it is not the biggest
+number — it is the strongest opposition for that rule. Banking early is correct
+only when a forfeit scores nothing; under a leaderboard rule the right play is to
+grind the score up and never bank, which is what the `grinder` field does. The
+eye-catching 71.0% is the attacker beating a field using the *wrong strategy for
+the rule it is being scored under*, and quoting it would be measuring our own
+modeling mistake. Against opposition that plays the rule correctly the attacker
+gets 52.0%, and loses $0.84 a game.
+
+So, does a profitable-and-hidden policy exist? Counting a policy as hidden if it
+stays under 3σ **and** the client-side detector never once reaches BOT:
+
+| match rule | tie rule | profitable | of those, < 3σ | of those, never actioned |
+|---|---|---|---|---|
+| banked | refund | 50 | 30 | **16** |
+| banked | split | 3 | 0 | **0** |
+| banked | loss | 0 | 0 | 0 |
+| score | refund | 93 | 93 | **51** |
+| score | split | 40 | 40 | **25** |
+| score | loss | 0 | 0 | 0 |
+
+Three findings, in descending order of how much they should change what a
+defender does:
+
+**1. The tie rule is an anti-cheat control.** Refunding double-forfeits creates
+16 profitable-and-invisible policies where raking them leaves 0. The attacker's
+whole margin under the `banked` rule lives in the games nobody won. Rake every
+seated game and the margin evaporates — no forensics required.
+
+**2. The scoring rule sets how detectable a winner can be.** Under the `banked`
+rule two-thirds of matches tie at zero, which crushes the population's win-rate
+spread to **2.8–3.2 pp**, so any consistent winner is immediately a loud outlier.
+Under the `score` rule skill shows in every game and the spread widens to
+**8.9–10.3 pp** — wide enough that a 71% bot reads as only 2.1σ. Same detector,
+same attacker; the scoring rule alone moves it from unmissable to unremarkable.
+If win-rate z-score is going to be the primary ranking signal, the scoring rule
+determines how much power it has.
+
+**3. The attacker's profit comes from the field's mistakes, not from beating the
+detector.** Every profitable-and-hidden row above is against a field that either
+plays badly or plays the wrong strategy for the rule. The modeled fields' own
+best-performing greed level (bank@30–50) is well above the attacker's optimum
+(bank@12–30), i.e. the field is systematically too greedy — and that gap *is* the
+attacker's edge. Anything that teaches players to bank better (UX nudges, a
+visible expected-value hint, better onboarding) narrows the exploitable margin.
+That is an unusual place to find an anti-cheat lever, and it is cheaper than any
+detector.
+
+**The honest bottom line.** The claim "there is no profitable-and-hidden zone"
+survives, but conditionally, and the conditions are now stated: it holds under a
+head-to-head rule where a forfeited run banks nothing *and* ties are raked, and it
+holds against opposition that plays its scoring rule correctly. Change either and
+a hidden profitable attacker appears. The rake wall is real, but it is a wall the
+operator has to keep in repair, not a law of nature.
 
 ### Session cadence is a cheap filter, not a defense
 

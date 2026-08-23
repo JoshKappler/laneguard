@@ -29,13 +29,22 @@ interface TracePoint {
   t: number;
 }
 
+/**
+ * What a scheduled swipe is FOR. The direction is deliberately re-derived at
+ * fire time rather than trusted from scheduling time — a reaction delay is long
+ * enough for the road to change, and a stale direction is how a planner steers
+ * into a car that was not there when it decided. Only a deliberate risk keeps
+ * its original direction, because the whole point of that move is the contested
+ * lane it picked.
+ */
+type Intent = "react" | "bank" | "risk";
+
 interface Pending {
   fireAt: number;
   dir: number;
   /** the RT this fire is scheduled to realize (for gating) */
   rt: number;
-  /** true if this is a deliberate contested-space entry */
-  risky: boolean;
+  intent: Intent;
   /** threat onset time this reaction is measured from (reactive dodges only) */
   threatAt: number;
 }
@@ -238,6 +247,27 @@ export class Bot {
     return min;
   }
 
+  /** true once the run has banked enough score that the player should stop
+   *  seeking value and go cash out. null target = never (legacy behavior). */
+  private wantBank(): boolean {
+    const t = this.cfg.cashout.target;
+    return t != null && this.engine.state.score >= t;
+  }
+
+  /** one safe step toward the cashout lane, or 0 to hold/wait. Never crosses
+   *  into a contested or barrier-blocked lane — banking yields to safety. */
+  private bankStep(): number {
+    const e = this.engine,
+      s = e.state;
+    if (s.lane === e.cashLane) return 0; // already here: hold to bank
+    const dir = Math.sign(e.cashLane - s.lane);
+    const next = s.lane + dir;
+    if (!this.crossOk(s.lane, dir)) return 0;
+    if (this.firstObs(next) < 0.9) return 0;
+    if (!this.laneClear(next, null)) return 0;
+    return dir;
+  }
+
   /** an adjacent lane that is contested (a car inside the threat window) but
    *  not certain death — for a deliberate risky move. */
   private contestedDir(): number {
@@ -322,18 +352,31 @@ export class Bot {
         // reactive fires realize their sampled RT; risky/proactive must still
         // never realize a sub-floor credited RT. Gate on the YOUNGEST creditable
         // threat so no car — nearest or not — can be credited below the floor.
-        const gate = pend.risky || pend.threatAt === 0 ? this.cfg.rt.floor : pend.rt;
+        const gate =
+          pend.intent !== "react" || pend.threatAt === 0
+            ? this.cfg.rt.floor
+            : pend.rt;
         if (this.minCreditAge(e.state.lane, now) < gate) return out;
       }
       this.pending = null;
-      const dir = pend.risky ? pend.dir : this.safeDir();
+      // Re-derive the direction against the road as it is NOW. A bank-step
+      // yields to safety: if the lane became threatened during the delay, dodge
+      // instead and try to bank again once it is calm.
+      let dir: number;
+      if (pend.intent === "risk") dir = pend.dir;
+      else if (pend.intent === "bank")
+        dir = this.creditedThreat(e.state.lane) ? this.safeDir() : this.bankStep();
+      else dir = this.safeDir();
       if (dir) this.startSwipe(dir, now);
       return out;
     }
 
     // perfect: scripted, instant reaction, no RT model at all
     if (this.mode === "perfect") {
-      const dir = this.safeDir();
+      const dir =
+        this.wantBank() && this.firstObs(e.state.lane) > this.cfg.cashout.calm
+          ? this.bankStep()
+          : this.safeDir();
       if (dir) this.startSwipe(dir, now);
       return out;
     }
@@ -353,7 +396,7 @@ export class Bot {
       const rdir = this.contestedDir();
       if (rdir) {
         const rt = this.sampleRt();
-        this.pending = { fireAt: now + rt, dir: rdir, rt, risky: true, threatAt: 0 };
+        this.pending = { fireAt: now + rt, dir: rdir, rt, intent: "risk", threatAt: 0 };
         return out;
       }
     }
@@ -368,21 +411,47 @@ export class Bot {
       const fireAt = this.cfg.gateRtToThreat
         ? Math.max(now, credit.threatAt + rt)
         : now + rt;
-      this.pending = { fireAt, dir: 0, rt, risky: false, threatAt: credit.threatAt };
+      this.pending = { fireAt, dir: 0, rt, intent: "react", threatAt: credit.threatAt };
       return out;
     }
 
-    // Proactive reposition toward open road / higher-value lanes. No un-logged
-    // threat in the current lane here, so no RT is credited for this move.
-    const dir = this.safeDir();
+    // Proactive reposition toward open road / higher-value lanes — unless the
+    // run has banked enough score to go cash out, in which case steer to the
+    // cashout lane instead. No un-logged threat in the current lane here, so no
+    // RT is credited for this move.
+    const banking =
+      this.wantBank() && this.firstObs(e.state.lane) > this.cfg.cashout.calm;
+    const dir = banking ? this.bankStep() : this.safeDir();
     if (!dir) return out;
     const rt = this.sampleRt();
-    this.pending = { fireAt: now + rt, dir, rt, risky: false, threatAt: 0 };
+    this.pending = {
+      fireAt: now + rt,
+      dir,
+      rt,
+      intent: banking ? "bank" : "react",
+      threatAt: 0,
+    };
     return out;
   }
 
-  private startSwipe(dir: number, now: number) {
+  /**
+   * Execution error. A weaker player does not plan worse so much as fail to
+   * carry out what they planned: the swipe never lands, or it goes the wrong
+   * way. Applied at fire time so the decision itself stays sound and only the
+   * execution degrades. Returns 0 to drop the move entirely.
+   */
+  private fumble(dir: number): number {
+    const p = this.cfg.skill.errorRate;
+    if (p <= 0) return dir;
+    if (this.rand() >= p) return dir;
+    // two thirds of fumbles are a missed input, one third is a wrong-way swipe
+    return this.rand() < 0.667 ? 0 : -dir;
+  }
+
+  private startSwipe(dirIn: number, now: number) {
     const e = this.engine;
+    const dir = this.fumble(dirIn);
+    if (!dir) return;
     const trusted = this.hwInject;
     const startX = 200 + (this.rand() - 0.5) * 10;
     const startY = 560 + (this.rand() - 0.5) * 24;

@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "batch": "tsx scripts/batch.ts",
     "oracle": "node test/oracle/run-oracle.mjs",
-    "calibrate": "tsx scripts/calibrate.ts"
+    "calibrate": "tsx scripts/calibrate.ts",
+    "evo": "tsx scripts/evo/run.ts"
   },
   "dependencies": {
     "next": "^16.1.0",

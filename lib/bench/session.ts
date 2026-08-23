@@ -80,6 +80,16 @@ export interface SessionSpec {
   snapshotAtS?: number[];
   /** keep the full per-swipe feature vectors + event log for export */
   keepEvents?: boolean;
+  /**
+   * Evaluate the detector ensemble every Nth frame instead of every frame.
+   * The per-frame default exists only to timestamp verdict transitions to the
+   * frame, and it dominates session cost — the ensemble is ~100x the price of
+   * advancing the world. Sampling at N=6 (10 Hz) coarsens firstFlag/firstBot
+   * timings to 0.1 s and leaves the final verdict untouched, which is the right
+   * trade for large sweeps. Defaults to 1 so every existing caller, test and
+   * golden number is bit-for-bit unaffected.
+   */
+  analyzeEveryN?: number;
 }
 
 const avg = (a: number[]) =>
@@ -210,6 +220,7 @@ export function runSession(spec: SessionSpec): SessionResult {
   };
 
   const totalFrames = Math.round((spec.durationS * 1000) / FRAME_MS);
+  const everyN = Math.max(1, Math.floor(spec.analyzeEveryN ?? 1));
   for (let frame = 0; frame < totalFrames; frame++) {
     route(engine.step(FRAME_MS));
     detector.tickRisks(engine.now);
@@ -217,13 +228,15 @@ export function runSession(spec: SessionSpec): SessionResult {
 
     // verdict / flag transition tracking
     const nowS = engine.now / 1000;
-    const v = detector.analyze();
-    for (const f of v.flags)
-      if (!seenFlags.has(f) && firstFlagS === null) firstFlagS = nowS;
-    seenFlags = new Set(v.flags);
-    if (v.ready) {
-      if (v.label === "SUSPECT" && firstSuspectS === null) firstSuspectS = nowS;
-      if (v.label === "BOT" && firstBotS === null) firstBotS = nowS;
+    if (frame % everyN === 0) {
+      const v = detector.analyze();
+      for (const f of v.flags)
+        if (!seenFlags.has(f) && firstFlagS === null) firstFlagS = nowS;
+      seenFlags = new Set(v.flags);
+      if (v.ready) {
+        if (v.label === "SUSPECT" && firstSuspectS === null) firstSuspectS = nowS;
+        if (v.label === "BOT" && firstBotS === null) firstBotS = nowS;
+      }
     }
 
     while (nextSnap < snapAt.length && nowS >= snapAt[nextSnap]) {

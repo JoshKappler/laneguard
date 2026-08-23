@@ -47,5 +47,12 @@ jobs:
       - name: Batch (headless simulation run)
         run: pnpm batch --seeds 6
 
+      # Tiny parameters: this proves the multi-process sweep still wires up and
+      # its arithmetic runs, not that the numbers are converged. The quoted
+      # figures come from the full local run (1.2M runs) — at this size the
+      # win rates carry ~11pp of sampling noise and mean nothing.
+      - name: Evolution sweep (smoke)
+        run: pnpm evo --courses 20 --pop 12 --reps 1 --workers 2 --no-detect
+
       - name: Build
         run: pnpm build

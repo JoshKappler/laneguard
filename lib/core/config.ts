@@ -89,6 +89,30 @@ export interface BotConfig {
   };
   /** time-to-impact (s) below which the perfect bot fires immediately */
   perfectUrgency: number;
+  /**
+   * Cashout strategy — the greed dial. Once the run's score reaches `target`,
+   * the player stops seeking value and steers to the cashout lane to bank,
+   * dodging only if directly threatened. `target: null` is the legacy behavior
+   * (never bank on purpose; a run ends only by crashing or wandering into the
+   * cashout lane). This is the lever the evolution run sweeps: a low target
+   * banks small-but-sure, a high target risks the run for a bigger multiplier.
+   * `calm` is the time-to-impact (s) the current lane must be clear of before a
+   * bank-step is taken, so banking never overrides an owed dodge.
+   */
+  cashout: {
+    target: number | null;
+    calm: number;
+  };
+  /**
+   * Execution quality. Used to model a population of players of differing
+   * ability with one planner: `errorRate` is the probability that a decided
+   * lane change is fumbled (dropped, or sent the wrong way), which is how a
+   * weaker player actually loses runs. 0 = flawless execution, the legacy
+   * behavior for every attacker profile.
+   */
+  skill: {
+    errorRate: number;
+  };
 }
 
 export interface DetectorConfig {
@@ -203,10 +227,31 @@ export interface EconConfig {
   rake: number;
   nPlayers: number;
   nGames: number;
+  /**
+   * A HYPOTHETICAL sustained win rate, swept to ask "how much of an outlier
+   * would a bot at this rate be". It is an input to the arithmetic, not a
+   * measurement of any attacker in this build. The measured ceiling — what the
+   * best policy in the head-to-head sweep actually achieved against the
+   * strongest modeled field — is `MEASURED_BOT_WR_CEILING` below.
+   */
   botWR: number;
   band: number;
   k: number;
 }
+
+/**
+ * Best win rate any attacker policy reached against the strongest modeled field
+ * in the head-to-head sweep (`pnpm evo`: 5 fields x 160 players x 1000 shared
+ * courses, 99 policies x 4 seeds, 1.2M runs), under the head-to-head rule where
+ * a forfeited run banks nothing. Recorded here so the default `botWR` is never
+ * mistaken for something that was observed.
+ *
+ * The same sweep under a leaderboard rule — where a crashed run's score still
+ * counts — reached 71.0%, but only against a field banking early, which is the
+ * wrong strategy for that rule. Against opposition playing the leaderboard rule
+ * correctly the ceiling falls to 52.0%. See results/evo/evolution.json.
+ */
+export const MEASURED_BOT_WR_CEILING = 0.565;
 
 export type PlayMode = "human" | "perfect" | "mirror" | "generative";
 
@@ -273,6 +318,8 @@ export const DEFAULT_CONFIG: BenchConfig = {
     },
     mirror: { corpusSize: 4, perturbPx: 1.6, scaleVar: 0.08 },
     perfectUrgency: 0.95,
+    cashout: { target: null, calm: 1.2 },
+    skill: { errorRate: 0 },
   },
   detector: {
     reaction: {
@@ -564,7 +611,7 @@ export const PRESETS: Preset[] = [
     id: "stealth-camouflage",
     label: "Stealth camouflage bot",
     description:
-      "The full kit: organic noise, ex-Gaussian reaction times gated to threat onset, deliberate contested-space entries and aborted gestures. Beats the entire client-side detector — at a measurable cost in crashes, which is the point.",
+      "The full kit: organic noise, ex-Gaussian reaction times gated to threat onset, deliberate contested-space entries and aborted gestures, and a human banking discipline. Beats the entire client-side detector — at a measurable cost in crashes, which is the point.",
     logLine:
       "PRESET: stealth camouflage — the client-side detector should stay HUMAN; the economy layer is what's left",
     config: {
@@ -576,6 +623,18 @@ export const PRESETS: Preset[] = [
         gateRtToThreat: true,
         riskPerMin: 0.7,
         abortsPerMin: 1.6,
+        /*
+         * Banking at 30 comes out of the head-to-head sweep (`pnpm evo`,
+         * 1.2M runs): it is the greed level whose win rate holds up against
+         * every modeled field — 54.4-57.9%, versus bank@12 which scores higher
+         * against a weak field but collapses to 49.8% against a strong one.
+         * It also makes the attacker QUIETER, not louder: banking retires the
+         * "never banks a run" texture flag, so SUSPECT touches drop from 37.5%
+         * of seeds to 25% while BOT stays at 0%. A bot that cashes out like a
+         * human is both harder to see and better at winning, which is the
+         * uncomfortable part.
+         */
+        cashout: { target: 30 },
       },
     },
   },
