@@ -42,8 +42,10 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # Fewer seeds in CI just to prove the runner works end-to-end; the
+      # README/writeup tables are generated locally with the default 12.
       - name: Batch (headless simulation run)
-        run: pnpm batch
+        run: pnpm batch --seeds 6
 
       - name: Build
         run: pnpm build

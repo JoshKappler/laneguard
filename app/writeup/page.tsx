@@ -100,6 +100,39 @@ export default function Writeup() {
         is why the strongest conclusion here needs no per-player forensics at all.
       </P>
 
+      <figure style={{ margin: "36px 0 8px" }}>
+        <div className="eyebrow" style={{ marginBottom: 12 }}>Reference vs. simulation</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+          {[
+            { ref: "ref-start.png", ours: "ours-start.png", label: "start screen" },
+            { ref: "ref-gameplay.png", ours: "ours-gameplay.png", label: "gameplay + HUD" },
+          ].map((pair) => (
+            <div key={pair.label}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, alignItems: "start" }}>
+                <div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`/compare/${pair.ref}`} alt={`Triumph Drive ${pair.label} reference`} style={{ width: "100%", borderRadius: 6, border: "1px solid var(--line)", display: "block" }} />
+                  <div className="mono tiny muted" style={{ marginTop: 4, textAlign: "center" }}>reference</div>
+                </div>
+                <div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`/compare/${pair.ours}`} alt={`LaneGuard ${pair.label} render`} style={{ width: "100%", borderRadius: 6, border: "1px solid var(--line)", display: "block" }} />
+                  <div className="mono tiny" style={{ marginTop: 4, textAlign: "center", color: "var(--accent)" }}>ours</div>
+                </div>
+              </div>
+              <div className="mono tiny muted" style={{ marginTop: 6, textAlign: "center" }}>{pair.label}</div>
+            </div>
+          ))}
+        </div>
+        <figcaption style={{ ...serif, fontSize: 14, color: "var(--ink-2)", marginTop: 14, maxWidth: "70ch" }}>
+          The simulation is built from public App Store screenshots (left of each pair), matched by
+          deliberate observation: the blurred rainbow shoulder, the rotated green CASHOUT lettering,
+          cartoon cars with a consistent light source, and the HUD. It models the visual and physical
+          feel needed for the behavioral signals to be meaningful — not a clone of the product, and
+          with no access to it. Full provenance in <span className="mono">references/MANIFEST.md</span>.
+        </figcaption>
+      </figure>
+
       <H n="02">The arms race, measured</H>
       <P>
         The honest headline is that a competent attacker beats the entire client-side detector, and
@@ -135,8 +168,8 @@ export default function Writeup() {
         contested space), so it flags on 17% of seeds by 180&nbsp;s. The stealth rung closes that gap:
         it enters contested space on purpose and sometimes genuinely crashes for it, fakes aborted
         gestures, and gates its reaction times to threat onset with an ex-Gaussian sampler that has a
-        real lapse tail. It reads HUMAN, confidence 0.09, and never flags as BOT across ten minutes
-        and three seeds. That is the ceiling of client-side behavioral detection.
+        real lapse tail. It reads HUMAN, confidence 0.09, and never flags as BOT across three
+        sustained minutes and three seeds. That is the ceiling of client-side behavioral detection.
       </P>
 
       <H n="03">The seven signals</H>

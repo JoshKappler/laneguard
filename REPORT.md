@@ -93,7 +93,8 @@ contested space, so lookahead-verified play shows up over a few minutes → BOT 
 contested space on purpose and sometimes genuinely crashes for it, fakes
 aborted gestures, and gates its reaction times to threat onset with an
 ex-Gaussian sampler (a real lapse tail). It reads **HUMAN, confidence 0.09, and
-never flags as BOT across ten minutes and three seeds.**
+never flags as BOT across three sustained minutes and three seeds (the regression test;
+longer in manual runs).**
 
 That is the ceiling of client-side behavioral detection. What survives it is not
 a better forensic signal — it is the economics.
