@@ -4,8 +4,9 @@
  * README and writeup quote — so those numbers can be re-derived rather than
  * rot. Deterministic: same seeds in, same table out.
  *
- *   pnpm batch            # print tables, write results/summary.json
- *   pnpm batch --seeds 40 # more seeds per profile
+ *   pnpm batch                 # print tables, write results/summary.json
+ *   pnpm batch --seeds 40      # more seeds per profile
+ *   pnpm batch --duration 600  # 10-minute sessions (the stealth soak)
  */
 import { writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
@@ -21,11 +22,12 @@ import { simulatePopulation } from "../lib/econ/population.ts";
 import { breakEven, evPerGame } from "../lib/econ/economy.ts";
 import { simulateWeek, cadenceMetrics } from "../lib/econ/cadence.ts";
 
-const argSeeds = (() => {
-  const i = process.argv.indexOf("--seeds");
-  return i >= 0 ? Math.max(1, parseInt(process.argv[i + 1], 10) || 12) : 12;
-})();
-const DURATION_S = 180;
+const argNum = (flag: string, dflt: number) => {
+  const i = process.argv.indexOf(flag);
+  return i >= 0 ? Math.max(1, parseInt(process.argv[i + 1], 10) || dflt) : dflt;
+};
+const argSeeds = argNum("--seeds", 12);
+const DURATION_S = argNum("--duration", 180);
 
 interface ProfileAgg {
   id: string;

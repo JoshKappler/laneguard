@@ -67,7 +67,7 @@ describe("generative bot, organic noise (the evasion)", () => {
     bot: { noise: { model: "organic" as const } },
   };
 
-  test("permanently defeats every swipe-level signal (all seeds)", () => {
+  test("permanently defeats every swipe-level signal (all seeds)", async () => {
     for (const seed of [1337, 7, 99]) {
       const r = runSession({
         config: mk(over, seed),
@@ -81,6 +81,8 @@ describe("generative bot, organic noise (the evasion)", () => {
       }
       expect(r.final.featureStats.meanWhite).toBeGreaterThan(1.4);
       expect(r.final.featureStats.meanWhite).toBeLessThan(2.05);
+      // yield so the worker can heartbeat between synchronous sessions
+      await new Promise((res) => setTimeout(res, 0));
     }
   });
 
