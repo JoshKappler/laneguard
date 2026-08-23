@@ -66,9 +66,11 @@ reaction times gated to threat onset, deliberate imperfect play (it enters
 contested space and genuinely crashes for it, and fakes aborted gestures), and a
 human banking discipline. That last one is not cosmetic: cashing out retires the
 "never banks a run" texture flag, so adding it made the attacker simultaneously
-*better at winning* (46% → 55% head-to-head) and *quieter* (SUSPECT touches
-37.5% → 25% of seeds). Defenders should expect competent attackers to look more
-normal as they get stronger, not less.
+*better at winning* (head-to-head win rate 49–53% → 54–58% across the modeled
+fields) and *quieter* (SUSPECT touches 37.5% → 25% of seeds, ever-BOT unchanged
+at 0). Defenders should expect a competent attacker to look **more** normal as it
+gets stronger, not less — which is the wrong way round for anyone hoping better
+play is itself a tell.
 
 Three minutes doesn't separate the last two rungs, so run both to 10 minutes
 (`pnpm batch --duration 600`):
