@@ -26,7 +26,7 @@ const description =
   "An honest, measured anti-cheat test bench: an original simulation of a lane-change money game, three attacker tiers (one that defeats the whole client-side detector), a 7-signal behavioral detector, and the economic argument that actually binds a bot.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://laneguard.vercel.app"),
+  metadataBase: new URL("https://laneguard-boffys-projects.vercel.app"),
   title,
   description,
   openGraph: {
