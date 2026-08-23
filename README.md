@@ -24,6 +24,21 @@ verdict + event log on the right.
 - **Event log** — timestamped stream of everything: per-swipe measurements, dodge
   reaction times, contested-space entries and how they resolved, run endings with
   payout, flags the moment they fire, and verdict transitions.
+- **Server-side analytics** — two offline models over account history rather than the
+  live session: the $5 economy / population win-rate simulator, and the 7-day session
+  cadence model. Both are interactive (entry rake, population size, games played, bot
+  win rate).
+
+## The game
+
+4 lanes, scored by risk: **lane 0 is the rainbow lane at 5x**, lane 1 is 2x, lane 2 is
+1x, and lane 3 is the cashout lane (no scoring — hold it to bank the run). Speed ramps
+from 15 to 34 and obstacle density from 0.55 to 0.9 as a run continues, so the reaction
+window shrinks the longer you survive. Traffic moves at varied per-wave speeds with
+follow logic. Steering is real: a swipe sets a target lane, the car banks to ~34°, and
+its lateral velocity comes from the heading, so it travels the angled path. Collision is
+a rotated-rectangle SAT test whose box shrinks while the car is angled — toggle
+**show hitboxes** to see the live geometry the physics actually uses.
 
 ## What it shows
 
@@ -94,10 +109,49 @@ of the real player distribution. Throttling down to look human pushes it below t
 wall, where botting stops making money. Unlike every swipe-level signal, this one cannot
 be spoofed by better trace synthesis — it is enforced by arithmetic, not by forensics.
 
+The bench simulates this directly: a skill-matched population (opponents drawn from a
+narrow band of the skill ladder, the way real head-to-head seeding works) produces
+observed win rates with **mean 50.0% and sd 3.8pp** over 300 games each — against a
+binomial noise floor of 2.9pp, so most of the visible spread is sampling noise, not
+skill. Sweeping the bot's win rate against that population:
+
+| bot win rate | EV / game | z-score | percentile | |
+|---|---|---|---|---|
+| 55% | −$0.60 | 1.3σ | 93.5 | loses money, invisible |
+| 60% | −$0.20 | 2.6σ | 99.25 | still loses money |
+| **62.5%** | **$0.00** | **~3.4σ** | **99.5** | **break-even — already an outlier** |
+| 65% | +$0.20 | 3.9σ | 99.75 | |
+| 70% | +$0.60 | 5.2σ | 99.75 | |
+| 80% | +$1.40 | 7.8σ | 100 | |
+
+**There is no profitable-and-hidden zone.** The instant a bot clears the rake wall it is
+already a >3σ outlier, and every additional dollar of profit pushes it further out. That
+is a structural property of the rake, not a tuning choice — which is why it survives
+attackers who defeat every motor-forensics signal above.
+
 The corollary for detection design: **rank accounts by win-rate z-score against the
 population, then use the behavioral signals as corroboration** before acting. That
 ordering keeps false-positive bans near zero, which matters a lot when a ban means
 withholding someone's cash balance.
+
+## Session cadence and scheduling
+
+The second server-side panel simulates 7 days of account activity for three profiles and
+measures what separates them:
+
+| | games/wk | in-session gap cv | active hours | longest idle |
+|---|---|---|---|---|
+| human | 182 | 0.62 | 13/24 | 22.7 h |
+| naive farm | 13,438 | **0.03** | **24/24** | **0.0 h** |
+| scheduled bot | 371 | 0.52 | 14/24 | 23.6 h |
+
+The naive farm is trivially caught: a rigid inter-game cadence (cv 0.03 vs a human's
+0.62) and no sleep block anywhere in the week. But note the honest result — the
+**scheduled bot passes every cadence check**, because mimicking a circadian curve and
+log-normal session gaps costs an attacker almost nothing except throughput. Cadence
+analysis is a cheap filter for lazy farms, not a defense against a competent one. It is
+the economy that closes the door: throttling to a human-looking 371 games/week is fine
+for the attacker, but throttling the *win rate* is not.
 
 ## Honest scope
 

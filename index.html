@@ -81,6 +81,13 @@
   #log .good { color: var(--ok); }
   #log .warn { color: var(--warn); }
   #log .flag { color: var(--bad); }
+  .dash2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; width: 100%; max-width: 1900px; }
+  .econRow { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+  .econRow canvas { background: #0a0d12; border: 1px solid var(--border); border-radius: 6px; }
+  .econCtl { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-top: 10px;
+             border-top: 1px solid var(--border); padding-top: 10px; color: var(--muted); font-size: 11px; }
+  .econCtl label { display: flex; align-items: center; gap: 6px; }
+  .econCtl input[type=range] { width: 90px; }
   .verdict {
     display: flex; align-items: center; justify-content: space-between;
     padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;
@@ -194,6 +201,45 @@
     <div id="log"></div>
   </section>
   </div>
+</div>
+
+<div class="dash2">
+  <section class="card">
+    <h2>SERVER-SIDE: ECONOMY &amp; POPULATION &mdash; $<span id="feeLbl">5</span> HEAD-TO-HEAD, <span id="rakeLbl">20</span>% RAKE</h2>
+    <div class="econRow">
+      <div>
+        <canvas id="popChart" width="470" height="210"></canvas>
+        <div class="detail" id="popStats"></div>
+      </div>
+      <div>
+        <canvas id="bankChart" width="380" height="210"></canvas>
+        <div class="detail" id="bankStats"></div>
+      </div>
+      <div class="mtable" id="econTable"></div>
+    </div>
+    <div class="econCtl">
+      <label>bot win rate <input type="range" id="botWR" min="45" max="90" value="70"> <span id="botWRLbl">70%</span></label>
+      <label>population <input type="range" id="popN" min="50" max="1000" step="50" value="400"> <span id="popNLbl">400</span></label>
+      <label>games each <input type="range" id="popG" min="50" max="800" step="50" value="300"> <span id="popGLbl">300</span></label>
+      <label>rake <input type="range" id="rakePct" min="0" max="40" value="20"> <span id="rakeLbl2">20%</span></label>
+      <button id="btnEcon">Re-run simulation</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>SERVER-SIDE: SESSION CADENCE &amp; SCHEDULING (7-DAY SIMULATION)</h2>
+    <div class="econRow">
+      <div>
+        <canvas id="cadChart" width="470" height="210"></canvas>
+        <div class="detail">activity by hour of day &mdash; human (green) vs naive farm (red) vs scheduled bot (yellow)</div>
+      </div>
+      <div>
+        <canvas id="gapChart" width="330" height="210"></canvas>
+        <div class="detail">inter-game gap distribution (log seconds)</div>
+      </div>
+      <div class="mtable" id="cadTable"></div>
+    </div>
+  </section>
 </div>
 
 <footer>
@@ -1967,6 +2013,299 @@ const AC = {
   },
 };
 
+/* ==================== SERVER-SIDE ACCOUNT ANALYTICS ====================
+   These two models are OFFLINE analysis over account history, not live-session
+   forensics. They exist because the swipe-level signals above are defeatable
+   by an attacker who models human motor noise properly (see the organic-noise
+   evasion), while these are not: the economy binds by arithmetic, and session
+   scheduling is expensive for a farm to fake without giving up throughput. */
+const Econ = {
+  ENTRY: 5,
+  rake: 0.20,
+  // head-to-head: pot = 2*entry, house takes rake, winner takes the rest
+  winNet() { return 2 * this.ENTRY * (1 - this.rake) - this.ENTRY; },
+  loseNet() { return -this.ENTRY; },
+  evAt(p) { return p * this.winNet() + (1 - p) * this.loseNet(); },
+  breakEven() { return -this.loseNet() / (this.winNet() - this.loseNet()); },
+
+  sim(nPlayers, nGames, botWR) {
+    const r = mulberry32(20260822);
+    // latent skill ~ N(0,1); match random pairs; logistic win probability.
+    // Win rate then EMERGES from play rather than being assigned.
+    const skill = [];
+    for (let i = 0; i < nPlayers; i++) skill.push(gauss(r, 0, 1));
+    // SKILL-MATCHED pairing, the way a real platform seeds head-to-head games:
+    // opponents come from a narrow band of the sorted skill ladder. This is what
+    // compresses observed win rates toward 50% and makes a sustained high win
+    // rate such a loud outlier.
+    const order = skill.map((s, i) => i).sort((a, b) => skill[a] - skill[b]);
+    const band = Math.max(2, Math.round(nPlayers * 0.06));
+    const wins = new Array(nPlayers).fill(0), played = new Array(nPlayers).fill(0);
+    const K = 1.15;
+    for (let g = 0; g < nGames * nPlayers / 2; g++) {
+      const ia = (r() * nPlayers) | 0;
+      let ib = ia + (((r() * (2 * band + 1)) | 0) - band);
+      ib = Math.max(0, Math.min(nPlayers - 1, ib));
+      if (ib === ia) ib = (ia + 1) % nPlayers;
+      const a = order[ia], b = order[ib];
+      const pa = 1 / (1 + Math.exp(-K * (skill[a] - skill[b])));
+      const aWins = r() < pa;
+      played[a]++; played[b]++;
+      if (aWins) wins[a]++; else wins[b]++;
+    }
+    const rates = [];
+    for (let i = 0; i < nPlayers; i++) if (played[i] >= 30) rates.push(wins[i] / played[i]);
+    const mean = rates.reduce((x, y) => x + y, 0) / rates.length;
+    const sd = Math.sqrt(rates.reduce((x, y) => x + (y - mean) * (y - mean), 0) / rates.length);
+    const z = (botWR - mean) / sd;
+    const above = rates.filter(v => v >= botWR).length;
+    // how much of the observed spread is just binomial sampling noise vs real
+    // skill: with nGames games the noise floor is sqrt(p(1-p)/n)
+    const noise = Math.sqrt(0.25 / nGames);
+    return { rates, mean, sd, z, noise, nGames, botWR,
+             pctile: 100 * (1 - above / rates.length) };
+  },
+
+  draw() {
+    const nP = +document.getElementById("popN").value;
+    const nG = +document.getElementById("popG").value;
+    const botWR = +document.getElementById("botWR").value / 100;
+    this.rake = +document.getElementById("rakePct").value / 100;
+    document.getElementById("botWRLbl").textContent = (botWR * 100).toFixed(0) + "%";
+    document.getElementById("popNLbl").textContent = nP;
+    document.getElementById("popGLbl").textContent = nG;
+    document.getElementById("rakeLbl").textContent = (this.rake * 100).toFixed(0);
+    document.getElementById("rakeLbl2").textContent = (this.rake * 100).toFixed(0) + "%";
+    document.getElementById("feeLbl").textContent = this.ENTRY;
+
+    const s = this.sim(nP, nG, botWR);
+    const be = this.breakEven();
+
+    // ---- population histogram ----
+    const c = document.getElementById("popChart"), g = c.getContext("2d");
+    const Wc = c.width, Hc = c.height;
+    g.clearRect(0, 0, Wc, Hc);
+    const lo = 0.25, hi = 0.95, bins = 56;
+    const counts = new Array(bins).fill(0);
+    for (const v of s.rates) {
+      const b = Math.max(0, Math.min(bins - 1, Math.floor(((v - lo) / (hi - lo)) * bins)));
+      counts[b]++;
+    }
+    const cmax = Math.max(...counts, 1);
+    const bw = (Wc - 16) / bins;
+    const xOf = v => 8 + ((v - lo) / (hi - lo)) * (Wc - 16);
+    for (let i = 0; i < bins; i++) {
+      const h = (counts[i] / cmax) * (Hc - 44);
+      const v = lo + (i + 0.5) / bins * (hi - lo);
+      g.fillStyle = v >= be ? "rgba(244,84,76,0.75)" : "#4da3ff";
+      g.fillRect(8 + i * bw, Hc - 26 - h, bw - 1, h);
+    }
+    // rake wall
+    g.strokeStyle = "#f5b942"; g.lineWidth = 2; g.setLineDash([4, 3]);
+    g.beginPath(); g.moveTo(xOf(be), 12); g.lineTo(xOf(be), Hc - 26); g.stroke();
+    g.setLineDash([]);
+    g.fillStyle = "#f5b942"; g.font = "10px ui-monospace, monospace"; g.textAlign = "center";
+    g.fillText("rake wall " + (be * 100).toFixed(1) + "%", xOf(be), 10);
+    // bot marker
+    g.strokeStyle = "#f4544c"; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(xOf(botWR), 12); g.lineTo(xOf(botWR), Hc - 26); g.stroke();
+    g.fillStyle = "#f4544c";
+    g.fillText("BOT " + (botWR * 100).toFixed(0) + "%", xOf(botWR), Hc - 14);
+    g.fillStyle = "#8792a6"; g.textAlign = "left";
+    g.fillText((lo * 100).toFixed(0) + "%", 8, Hc - 4);
+    g.textAlign = "right"; g.fillText((hi * 100).toFixed(0) + "%", Wc - 8, Hc - 4);
+    g.textAlign = "left";
+    g.fillText("player win-rate distribution (n=" + s.rates.length + ", " + nG + " games each)", 8, Hc - 32 - (Hc - 44));
+
+    document.getElementById("popStats").textContent =
+      "skill-matched population: mean " + (s.mean * 100).toFixed(1) + "% · sd " + (s.sd * 100).toFixed(1) +
+      "pp (binomial noise floor " + (s.noise * 100).toFixed(1) + "pp) · bot z-score " + s.z.toFixed(1) +
+      "σ · bot at the " + s.pctile.toFixed(2) + "th percentile";
+
+    // ---- bankroll curves ----
+    const c2 = document.getElementById("bankChart"), g2 = c2.getContext("2d");
+    const W2 = c2.width, H2 = c2.height;
+    g2.clearRect(0, 0, W2, H2);
+    const series = [
+      { p: botWR, col: "#f4544c", label: "bot " + (botWR * 100).toFixed(0) + "%" },
+      { p: be, col: "#f5b942", label: "break-even" },
+      { p: s.mean, col: "#4da3ff", label: "median human" },
+    ];
+    const N = nG;
+    let ymin = 0, ymax = 0;
+    for (const ser of series) {
+      const end = this.evAt(ser.p) * N;
+      ymin = Math.min(ymin, end); ymax = Math.max(ymax, end);
+    }
+    const pad = Math.max(10, (ymax - ymin) * 0.1);
+    ymin -= pad; ymax += pad;
+    const yOf = v => H2 - 24 - ((v - ymin) / (ymax - ymin)) * (H2 - 40);
+    g2.strokeStyle = "rgba(135,146,166,0.25)"; g2.lineWidth = 1;
+    g2.beginPath(); g2.moveTo(8, yOf(0)); g2.lineTo(W2 - 8, yOf(0)); g2.stroke();
+    for (const ser of series) {
+      g2.strokeStyle = ser.col; g2.lineWidth = 2;
+      g2.beginPath();
+      for (let i = 0; i <= 60; i++) {
+        const n = (i / 60) * N;
+        const x = 8 + (i / 60) * (W2 - 16);
+        i ? g2.lineTo(x, yOf(this.evAt(ser.p) * n)) : g2.moveTo(x, yOf(this.evAt(ser.p) * n));
+      }
+      g2.stroke();
+      g2.fillStyle = ser.col; g2.font = "10px ui-monospace, monospace"; g2.textAlign = "right";
+      g2.fillText(ser.label + "  $" + (this.evAt(ser.p) * N).toFixed(0), W2 - 10, yOf(this.evAt(ser.p) * N) - 4);
+    }
+    g2.fillStyle = "#8792a6"; g2.textAlign = "left";
+    g2.fillText("expected bankroll over " + N + " games ($" + this.ENTRY + " entry)", 8, 12);
+
+    document.getElementById("bankStats").textContent =
+      "EV/game: bot " + (this.evAt(botWR) >= 0 ? "+" : "") + "$" + this.evAt(botWR).toFixed(2) +
+      " · median human $" + this.evAt(s.mean).toFixed(2) +
+      " · house take $" + (2 * this.ENTRY * this.rake).toFixed(2) + "/game";
+
+    // ---- the table ----
+    const profitable = botWR > be;
+    const rows = [
+      ["entry / pot", "$" + this.ENTRY + " / $" + (2 * this.ENTRY)],
+      ["rake", (this.rake * 100).toFixed(0) + "%  ($" + (2 * this.ENTRY * this.rake).toFixed(2) + ")"],
+      ["winner nets", "+$" + this.winNet().toFixed(2)],
+      ["loser nets", "-$" + this.ENTRY.toFixed(2)],
+      ["break-even win rate", (be * 100).toFixed(1) + " %"],
+      ["bot win rate", (botWR * 100).toFixed(0) + " %", profitable],
+      ["bot EV / game", (this.evAt(botWR) >= 0 ? "+" : "") + "$" + this.evAt(botWR).toFixed(2), profitable],
+      ["bot z-score", s.z.toFixed(1) + " σ", s.z > 4],
+      ["percentile", s.pctile.toFixed(2) + " th", s.z > 4],
+      ["verdict", profitable && s.z > 4 ? "PROFITABLE → DETECTABLE" : profitable ? "profitable, low signal" : "undetectable, unprofitable",
+        profitable && s.z > 4],
+    ];
+    document.getElementById("econTable").innerHTML = rows.map(r =>
+      `<span class="k">${r[0]}</span><span class="v${r[2] ? " hot" : ""}">${r[1]}</span>`).join("");
+  },
+};
+
+const Cadence = {
+  // circadian activity weight by hour (0-23): humans sleep, farms do not
+  curve: [.05,.02,.01,.01,.01,.02,.06,.18,.35,.45,.5,.55,.6,.58,.55,.6,.7,.85,1,1,.95,.8,.5,.2],
+
+  sim() {
+    const r = mulberry32(77003);
+    const DAYS = 7, out = { human: [], farm: [], sched: [] };
+    // HUMAN: session bursts placed by circadian weight; log-normal gaps inside
+    for (let d = 0; d < DAYS; d++) {
+      const sessions = 2 + ((r() * 3) | 0);
+      for (let s = 0; s < sessions; s++) {
+        let hr;
+        do { hr = r() * 24; } while (r() > this.curve[hr | 0]);
+        let t = d * 86400 + hr * 3600;
+        const games = 3 + ((r() * 12) | 0);
+        for (let gme = 0; gme < games; gme++) {
+          out.human.push(t);
+          t += Math.exp(gauss(r, Math.log(38), 0.55)); // gap between games
+        }
+      }
+    }
+    // NAIVE FARM: fixed cadence, 24/7, tiny jitter
+    for (let t = 0; t < DAYS * 86400; t += 45 + (r() - 0.5) * 4) out.farm.push(t);
+    // SCHEDULED BOT: mimics circadian + log-normal gaps + sleep block
+    for (let d = 0; d < DAYS; d++) {
+      const sessions = 3 + ((r() * 3) | 0);
+      for (let s = 0; s < sessions; s++) {
+        let hr;
+        do { hr = r() * 24; } while (r() > this.curve[hr | 0]);
+        let t = d * 86400 + hr * 3600;
+        const games = 6 + ((r() * 18) | 0);
+        for (let gme = 0; gme < games; gme++) {
+          out.sched.push(t);
+          t += Math.exp(gauss(r, Math.log(34), 0.5));
+        }
+      }
+    }
+    for (const k in out) out[k].sort((a, b) => a - b);
+    return out;
+  },
+
+  metrics(times) {
+    const gaps = [];
+    for (let i = 1; i < times.length; i++) gaps.push(times[i] - times[i - 1]);
+    const inSess = gaps.filter(g => g < 300);
+    const mean = inSess.reduce((a, b) => a + b, 0) / (inSess.length || 1);
+    const sd = Math.sqrt(inSess.reduce((a, b) => a + (b - mean) * (b - mean), 0) / (inSess.length || 1));
+    const hours = new Array(24).fill(0);
+    for (const t of times) hours[Math.floor(t / 3600) % 24]++;
+    const active = hours.filter(h => h > 0).length;
+    const longestIdle = Math.max(...gaps) / 3600;
+    return { n: times.length, cv: mean ? sd / mean : 0, activeHours: active, longestIdle, hours, gaps };
+  },
+
+  draw() {
+    const s = this.sim();
+    const m = { human: this.metrics(s.human), farm: this.metrics(s.farm), sched: this.metrics(s.sched) };
+
+    // hour-of-day profile
+    const c = document.getElementById("cadChart"), g = c.getContext("2d");
+    g.clearRect(0, 0, c.width, c.height);
+    const cols = [["human", "#3ecf8e"], ["farm", "#f4544c"], ["sched", "#f5b942"]];
+    let hmax = 0;
+    for (const [k] of cols) hmax = Math.max(hmax, ...m[k].hours.map(v => v / m[k].n));
+    const bw = (c.width - 20) / 24;
+    for (let h = 0; h < 24; h++) {
+      cols.forEach(([k, col], i) => {
+        const v = (m[k].hours[h] / m[k].n) / hmax;
+        const hh = v * (c.height - 40);
+        g.fillStyle = col;
+        g.globalAlpha = 0.85;
+        g.fillRect(10 + h * bw + i * (bw / 3), c.height - 22 - hh, bw / 3 - 1, hh);
+      });
+    }
+    g.globalAlpha = 1;
+    g.fillStyle = "#8792a6"; g.font = "10px ui-monospace, monospace"; g.textAlign = "left";
+    g.fillText("00", 10, c.height - 8); g.textAlign = "center";
+    g.fillText("12", c.width / 2, c.height - 8); g.textAlign = "right";
+    g.fillText("23", c.width - 10, c.height - 8);
+    g.textAlign = "left";
+    g.fillText("share of games played, by hour of day", 10, 12);
+
+    // gap histogram (log scale)
+    const c2 = document.getElementById("gapChart"), g2 = c2.getContext("2d");
+    g2.clearRect(0, 0, c2.width, c2.height);
+    const bins = 40, lo = Math.log(5), hi = Math.log(3600);
+    cols.forEach(([k, col]) => {
+      const counts = new Array(bins).fill(0);
+      const gs = m[k].gaps.filter(v => v > 4 && v < 3600);
+      for (const v of gs) {
+        const b = Math.max(0, Math.min(bins - 1, Math.floor(((Math.log(v) - lo) / (hi - lo)) * bins)));
+        counts[b]++;
+      }
+      const cm = Math.max(...counts, 1);
+      g2.strokeStyle = col; g2.lineWidth = 2; g2.beginPath();
+      for (let i = 0; i < bins; i++) {
+        const x = 8 + (i / (bins - 1)) * (c2.width - 16);
+        const y = c2.height - 22 - (counts[i] / cm) * (c2.height - 40);
+        i ? g2.lineTo(x, y) : g2.moveTo(x, y);
+      }
+      g2.stroke();
+    });
+    g2.fillStyle = "#8792a6"; g2.font = "10px ui-monospace, monospace";
+    g2.textAlign = "left"; g2.fillText("5s", 8, c2.height - 8);
+    g2.textAlign = "right"; g2.fillText("1h", c2.width - 8, c2.height - 8);
+    g2.textAlign = "left"; g2.fillText("in-session gap distribution", 8, 12);
+
+    const row = (k, label) => {
+      const x = m[k];
+      return [
+        [label + " games/wk", x.n],
+        [label + " gap cv", x.cv.toFixed(2), x.cv < 0.15],
+        [label + " active hours", x.activeHours + "/24", x.activeHours >= 23],
+        [label + " longest idle", x.longestIdle.toFixed(1) + " h", x.longestIdle < 3],
+      ];
+    };
+    const rows = [...row("human", "human"), ...row("farm", "farm"), ...row("sched", "sched")];
+    rows.push(["farm verdict", "CAUGHT (no sleep, rigid cadence)", true]);
+    rows.push(["scheduled verdict", "passes cadence checks", false]);
+    document.getElementById("cadTable").innerHTML = rows.map(r =>
+      `<span class="k">${r[0]}</span><span class="v${r[2] ? " hot" : ""}">${r[1]}</span>`).join("");
+  },
+};
+
 /* ============================== UI ============================== */
 const elSignals = document.getElementById("signals");
 const elFlags = document.getElementById("flags");
@@ -2019,8 +2358,16 @@ document.getElementById("btnReset").onclick = () => { AC.reset(); Dash.reset(); 
 document.getElementById("hwInject").onchange = e =>
   Dash.log("hardware-level injection simulation " + (e.target.checked ? "ON — bot events will arrive trusted" : "OFF — bot events arrive isTrusted=false"), "warn");
 
+for (const id of ["botWR", "popN", "popG", "rakePct"])
+  document.getElementById(id).oninput = () => Econ.draw();
+document.getElementById("btnEcon").onclick = () => { Econ.draw(); Cadence.draw(); };
+Econ.draw();
+Cadence.draw();
+
 Dash.drawCharts();
 Dash.log("LaneGuard test bench up — detector armed, session clock started", "good");
+Dash.log("economy model: $" + Econ.ENTRY + " head-to-head, " + (Econ.rake * 100).toFixed(0) +
+  "% rake → break-even win rate " + (Econ.breakEven() * 100).toFixed(1) + "%", "info");
 Dash.log("game: original Drive-style simulation · detector: 7 behavioral signals, thresholds are uncalibrated priors pending a human swipe corpus", "info");
 requestAnimationFrame(frame);
 </script>
