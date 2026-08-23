@@ -1,0 +1,91 @@
+{
+ "econ": {
+  "breakEven": {
+   "entry": 5,
+   "rake": 0.2,
+   "value": 0.625
+  },
+  "scenarios": [
+   {
+    "nPlayers": 400,
+    "nGames": 300,
+    "botWR": 0.55,
+    "mean": 0.500051,
+    "sd": 0.038267,
+    "z": 1.305278,
+    "pctile": 93.5,
+    "noise": 0.028868
+   },
+   {
+    "nPlayers": 400,
+    "nGames": 300,
+    "botWR": 0.6,
+    "mean": 0.500051,
+    "sd": 0.038267,
+    "z": 2.611878,
+    "pctile": 99.25,
+    "noise": 0.028868
+   },
+   {
+    "nPlayers": 400,
+    "nGames": 300,
+    "botWR": 0.625,
+    "mean": 0.500051,
+    "sd": 0.038267,
+    "z": 3.265178,
+    "pctile": 99.5,
+    "noise": 0.028868
+   },
+   {
+    "nPlayers": 400,
+    "nGames": 300,
+    "botWR": 0.65,
+    "mean": 0.500051,
+    "sd": 0.038267,
+    "z": 3.918478,
+    "pctile": 99.75,
+    "noise": 0.028868
+   },
+   {
+    "nPlayers": 400,
+    "nGames": 300,
+    "botWR": 0.7,
+    "mean": 0.500051,
+    "sd": 0.038267,
+    "z": 5.225078,
+    "pctile": 99.75,
+    "noise": 0.028868
+   },
+   {
+    "nPlayers": 400,
+    "nGames": 300,
+    "botWR": 0.8,
+    "mean": 0.500051,
+    "sd": 0.038267,
+    "z": 7.838278,
+    "pctile": 100,
+    "noise": 0.028868
+   }
+  ]
+ },
+ "cadence": {
+  "human": {
+   "n": 182,
+   "cv": 0.61787,
+   "activeHours": 13,
+   "longestIdle": 22.730461
+  },
+  "farm": {
+   "n": 13438,
+   "cv": 0.025635,
+   "activeHours": 24,
+   "longestIdle": 0.013056
+  },
+  "sched": {
+   "n": 371,
+   "cv": 0.516087,
+   "activeHours": 14,
+   "longestIdle": 23.649902
+  }
+ }
+}

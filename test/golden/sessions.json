@@ -1,0 +1,1310 @@
+[
+ {
+  "scenario": {
+   "name": "perfect-untrusted",
+   "mode": "perfect",
+   "hw": false,
+   "organic": false
+  },
+  "snapshots": {
+   "60s": {
+    "overall": 0.75,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0,
+      "ready": false
+     },
+     "swipe kinematics": {
+      "sus": 0.95,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 1,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": false
+     },
+     "behavior texture": {
+      "sus": 0,
+      "ready": false
+     },
+     "event integrity": {
+      "sus": 0.8,
+      "ready": true
+     }
+    },
+    "flags": [
+     "swipes have no motor noise (jitter 0.00px)",
+     "velocity profiles machine-uniform",
+     "swipes repeat in shape AND timing: 100% near-duplicate pairs (trace replay)",
+     "synthetic input events (isTrusted=false)"
+    ],
+    "counters": {
+     "dodges": 4,
+     "deaths": 0,
+     "moves": 11,
+     "swipes": 11,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 1,
+     "cashouts": 1
+    },
+    "featureStats": {
+     "meanJitter": 0,
+     "meanWhite": 0,
+     "meanWamp": 0,
+     "rtMean": 416.67,
+     "rtMin": 100,
+     "rtCv": 0.5734,
+     "marginCv": 0.3329
+    }
+   },
+   "120s": {
+    "overall": 0.75,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0.55,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0.95,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 1,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": false
+     },
+     "behavior texture": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "event integrity": {
+      "sus": 0.8,
+      "ready": true
+     }
+    },
+    "flags": [
+     "superhuman reaction floor: 100ms",
+     "swipes have no motor noise (jitter 0.00px)",
+     "velocity profiles machine-uniform",
+     "swipes repeat in shape AND timing: 100% near-duplicate pairs (trace replay)",
+     "never enters contested space across 22 moves (lookahead-verified play)",
+     "synthetic input events (isTrusted=false)"
+    ],
+    "counters": {
+     "dodges": 7,
+     "deaths": 0,
+     "moves": 22,
+     "swipes": 22,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 4,
+     "cashouts": 4
+    },
+    "featureStats": {
+     "meanJitter": 0,
+     "meanWhite": 0,
+     "meanWamp": 0,
+     "rtMean": 430.95,
+     "rtMin": 100,
+     "rtCv": 0.7002,
+     "marginCv": 0.4207
+    }
+   },
+   "180s": {
+    "overall": 0.75,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0.55,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0.95,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 1,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": true
+     },
+     "behavior texture": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "event integrity": {
+      "sus": 0.8,
+      "ready": true
+     }
+    },
+    "flags": [
+     "superhuman reaction floor: 100ms",
+     "swipes have no motor noise (jitter 0.00px)",
+     "velocity profiles machine-uniform",
+     "swipes repeat in shape AND timing: 100% near-duplicate pairs (trace replay)",
+     "never enters contested space across 39 moves (lookahead-verified play)",
+     "synthetic input events (isTrusted=false)"
+    ],
+    "counters": {
+     "dodges": 12,
+     "deaths": 0,
+     "moves": 39,
+     "swipes": 39,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 8,
+     "cashouts": 8
+    },
+    "featureStats": {
+     "meanJitter": 0,
+     "meanWhite": 0,
+     "meanWamp": 0,
+     "rtMean": 433.33,
+     "rtMin": 100,
+     "rtCv": 0.6613,
+     "marginCv": 0.4035
+    }
+   }
+  }
+ },
+ {
+  "scenario": {
+   "name": "perfect-trusted",
+   "mode": "perfect",
+   "hw": true,
+   "organic": false
+  },
+  "snapshots": {
+   "60s": {
+    "overall": 0.75,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0.95,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 1,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": false
+     },
+     "behavior texture": {
+      "sus": 0,
+      "ready": false
+     },
+     "event integrity": {
+      "sus": 0,
+      "ready": true
+     }
+    },
+    "flags": [
+     "swipes have no motor noise (jitter 0.00px)",
+     "velocity profiles machine-uniform",
+     "swipes repeat in shape AND timing: 100% near-duplicate pairs (trace replay)"
+    ],
+    "counters": {
+     "dodges": 7,
+     "deaths": 1,
+     "moves": 11,
+     "swipes": 11,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 2,
+     "cashouts": 1
+    },
+    "featureStats": {
+     "meanJitter": 0,
+     "meanWhite": 0,
+     "meanWamp": 0,
+     "rtMean": 514.29,
+     "rtMin": 166.67,
+     "rtCv": 0.4394,
+     "marginCv": 0.3667
+    }
+   },
+   "120s": {
+    "overall": 0.75,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0.95,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 1,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": true
+     },
+     "behavior texture": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "event integrity": {
+      "sus": 0,
+      "ready": true
+     }
+    },
+    "flags": [
+     "swipes have no motor noise (jitter 0.00px)",
+     "velocity profiles machine-uniform",
+     "swipes repeat in shape AND timing: 100% near-duplicate pairs (trace replay)",
+     "never enters contested space across 26 moves (lookahead-verified play)"
+    ],
+    "counters": {
+     "dodges": 15,
+     "deaths": 2,
+     "moves": 26,
+     "swipes": 26,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 3,
+     "cashouts": 1
+    },
+    "featureStats": {
+     "meanJitter": 0,
+     "meanWhite": 0,
+     "meanWamp": 0,
+     "rtMean": 636.67,
+     "rtMin": 166.67,
+     "rtCv": 0.3742,
+     "marginCv": 0.486
+    }
+   },
+   "180s": {
+    "overall": 0.75,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0.95,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 1,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": true
+     },
+     "behavior texture": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "event integrity": {
+      "sus": 0,
+      "ready": true
+     }
+    },
+    "flags": [
+     "swipes have no motor noise (jitter 0.00px)",
+     "velocity profiles machine-uniform",
+     "swipes repeat in shape AND timing: 100% near-duplicate pairs (trace replay)",
+     "never enters contested space across 38 moves (lookahead-verified play)"
+    ],
+    "counters": {
+     "dodges": 19,
+     "deaths": 4,
+     "moves": 38,
+     "swipes": 38,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 8,
+     "cashouts": 4
+    },
+    "featureStats": {
+     "meanJitter": 0,
+     "meanWhite": 0,
+     "meanWamp": 0,
+     "rtMean": 593.86,
+     "rtMin": 150,
+     "rtCv": 0.4812,
+     "marginCv": 0.5339
+    }
+   }
+  }
+ },
+ {
+  "scenario": {
+   "name": "mirror-untrusted",
+   "mode": "mirror",
+   "hw": false,
+   "organic": false
+  },
+  "snapshots": {
+   "60s": {
+    "overall": 0.75,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 1,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": false
+     },
+     "behavior texture": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "event integrity": {
+      "sus": 0.8,
+      "ready": true
+     }
+    },
+    "flags": [
+     "high-frequency noise energy is white-noise-shaped (ratio 2.34) — injected, not motor [uncalibrated prior]",
+     "swipes repeat in shape AND timing: 34% near-duplicate pairs (trace replay)",
+     "never enters contested space across 15 moves (lookahead-verified play)",
+     "synthetic input events (isTrusted=false)"
+    ],
+    "counters": {
+     "dodges": 8,
+     "deaths": 2,
+     "moves": 15,
+     "swipes": 15,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 2,
+     "cashouts": 0
+    },
+    "featureStats": {
+     "meanJitter": 1.8205,
+     "meanWhite": 2.3419,
+     "meanWamp": 0.7604,
+     "rtMean": 718.75,
+     "rtMin": 316.67,
+     "rtCv": 0.3496,
+     "marginCv": 0.6011
+    }
+   },
+   "120s": {
+    "overall": 0.75,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 1,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": true
+     },
+     "behavior texture": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "event integrity": {
+      "sus": 0.8,
+      "ready": true
+     }
+    },
+    "flags": [
+     "high-frequency noise energy is white-noise-shaped (ratio 2.28) — injected, not motor [uncalibrated prior]",
+     "swipes repeat in shape AND timing: 34% near-duplicate pairs (trace replay)",
+     "never enters contested space across 27 moves (lookahead-verified play)",
+     "synthetic input events (isTrusted=false)"
+    ],
+    "counters": {
+     "dodges": 13,
+     "deaths": 4,
+     "moves": 27,
+     "swipes": 27,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 6,
+     "cashouts": 2
+    },
+    "featureStats": {
+     "meanJitter": 1.8078,
+     "meanWhite": 2.2821,
+     "meanWamp": 0.7329,
+     "rtMean": 694.44,
+     "rtMin": 316.67,
+     "rtCv": 0.3529,
+     "marginCv": 0.6109
+    }
+   },
+   "180s": {
+    "overall": 0.75,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 1,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": true
+     },
+     "behavior texture": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "event integrity": {
+      "sus": 0.8,
+      "ready": true
+     }
+    },
+    "flags": [
+     "high-frequency noise energy is white-noise-shaped (ratio 2.27) — injected, not motor [uncalibrated prior]",
+     "swipes repeat in shape AND timing: 34% near-duplicate pairs (trace replay)",
+     "never enters contested space across 38 moves (lookahead-verified play)",
+     "synthetic input events (isTrusted=false)"
+    ],
+    "counters": {
+     "dodges": 19,
+     "deaths": 6,
+     "moves": 38,
+     "swipes": 37,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 9,
+     "cashouts": 3
+    },
+    "featureStats": {
+     "meanJitter": 1.7923,
+     "meanWhite": 2.2727,
+     "meanWamp": 0.7259,
+     "rtMean": 675,
+     "rtMin": 316.67,
+     "rtCv": 0.3987,
+     "marginCv": 0.615
+    }
+   }
+  }
+ },
+ {
+  "scenario": {
+   "name": "mirror-trusted",
+   "mode": "mirror",
+   "hw": true,
+   "organic": false
+  },
+  "snapshots": {
+   "60s": {
+    "overall": 0,
+    "ready": true,
+    "verdict": "HUMAN",
+    "signals": {
+     "reaction time": {
+      "sus": 0,
+      "ready": false
+     },
+     "swipe kinematics": {
+      "sus": 0,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0,
+      "ready": false
+     },
+     "replay similarity": {
+      "sus": 0,
+      "ready": false
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": false
+     },
+     "behavior texture": {
+      "sus": 0,
+      "ready": false
+     },
+     "event integrity": {
+      "sus": 0,
+      "ready": true
+     }
+    },
+    "flags": [],
+    "counters": {
+     "dodges": 3,
+     "deaths": 2,
+     "moves": 7,
+     "swipes": 6,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 3,
+     "cashouts": 1
+    },
+    "featureStats": {
+     "meanJitter": 1.8494,
+     "meanWhite": 2.3223,
+     "meanWamp": 0.7673,
+     "rtMean": 972.22,
+     "rtMin": 833.33,
+     "rtCv": 0.119,
+     "marginCv": 0.759
+    }
+   },
+   "120s": {
+    "overall": 0.75,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 1,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": false
+     },
+     "behavior texture": {
+      "sus": 0.25,
+      "ready": true
+     },
+     "event integrity": {
+      "sus": 0,
+      "ready": true
+     }
+    },
+    "flags": [
+     "high-frequency noise energy is white-noise-shaped (ratio 2.29) — injected, not motor [uncalibrated prior]",
+     "swipes repeat in shape AND timing: 40% near-duplicate pairs (trace replay)"
+    ],
+    "counters": {
+     "dodges": 9,
+     "deaths": 4,
+     "moves": 18,
+     "swipes": 17,
+     "aborts": 0,
+     "risks": 1,
+     "runEnds": 5,
+     "cashouts": 1
+    },
+    "featureStats": {
+     "meanJitter": 1.8643,
+     "meanWhite": 2.29,
+     "meanWamp": 0.7483,
+     "rtMean": 742.59,
+     "rtMin": 133.33,
+     "rtCv": 0.4164,
+     "marginCv": 0.8302
+    }
+   },
+   "180s": {
+    "overall": 0.75,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 1,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": true
+     },
+     "behavior texture": {
+      "sus": 0.25,
+      "ready": true
+     },
+     "event integrity": {
+      "sus": 0,
+      "ready": true
+     }
+    },
+    "flags": [
+     "high-frequency noise energy is white-noise-shaped (ratio 2.31) — injected, not motor [uncalibrated prior]",
+     "swipes repeat in shape AND timing: 38% near-duplicate pairs (trace replay)"
+    ],
+    "counters": {
+     "dodges": 16,
+     "deaths": 5,
+     "moves": 36,
+     "swipes": 35,
+     "aborts": 0,
+     "risks": 1,
+     "runEnds": 9,
+     "cashouts": 4
+    },
+    "featureStats": {
+     "meanJitter": 1.8536,
+     "meanWhite": 2.314,
+     "meanWamp": 0.754,
+     "rtMean": 698.96,
+     "rtMin": 133.33,
+     "rtCv": 0.4102,
+     "marginCv": 0.6791
+    }
+   }
+  }
+ },
+ {
+  "scenario": {
+   "name": "generative-iid-trusted",
+   "mode": "generative",
+   "hw": true,
+   "organic": false
+  },
+  "snapshots": {
+   "60s": {
+    "overall": 0.5,
+    "ready": true,
+    "verdict": "SUSPECT",
+    "signals": {
+     "reaction time": {
+      "sus": 0,
+      "ready": false
+     },
+     "swipe kinematics": {
+      "sus": 0,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 0,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": false
+     },
+     "behavior texture": {
+      "sus": 0,
+      "ready": false
+     },
+     "event integrity": {
+      "sus": 0,
+      "ready": true
+     }
+    },
+    "flags": [
+     "high-frequency noise energy is white-noise-shaped (ratio 2.32) — injected, not motor [uncalibrated prior]"
+    ],
+    "counters": {
+     "dodges": 3,
+     "deaths": 3,
+     "moves": 8,
+     "swipes": 8,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 4,
+     "cashouts": 1
+    },
+    "featureStats": {
+     "meanJitter": 1.694,
+     "meanWhite": 2.3215,
+     "meanWamp": 0.683,
+     "rtMean": 866.67,
+     "rtMin": 733.33,
+     "rtCv": 0.2041,
+     "marginCv": 0.6678
+    }
+   },
+   "120s": {
+    "overall": 0.72,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0.55,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 0.0573,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": false
+     },
+     "behavior texture": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "event integrity": {
+      "sus": 0,
+      "ready": true
+     }
+    },
+    "flags": [
+     "superhuman reaction floor: 67ms",
+     "high-frequency noise energy is white-noise-shaped (ratio 2.22) — injected, not motor [uncalibrated prior]",
+     "never enters contested space across 19 moves (lookahead-verified play)"
+    ],
+    "counters": {
+     "dodges": 11,
+     "deaths": 6,
+     "moves": 19,
+     "swipes": 19,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 7,
+     "cashouts": 1
+    },
+    "featureStats": {
+     "meanJitter": 1.7332,
+     "meanWhite": 2.2186,
+     "meanWamp": 0.6668,
+     "rtMean": 792.42,
+     "rtMin": 66.67,
+     "rtCv": 0.3386,
+     "marginCv": 0.7983
+    }
+   },
+   "180s": {
+    "overall": 0.72,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0.55,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 0.0462,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": true
+     },
+     "behavior texture": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "event integrity": {
+      "sus": 0,
+      "ready": true
+     }
+    },
+    "flags": [
+     "superhuman reaction floor: 67ms",
+     "high-frequency noise energy is white-noise-shaped (ratio 2.21) — injected, not motor [uncalibrated prior]",
+     "never enters contested space across 27 moves (lookahead-verified play)"
+    ],
+    "counters": {
+     "dodges": 15,
+     "deaths": 8,
+     "moves": 27,
+     "swipes": 26,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 10,
+     "cashouts": 2
+    },
+    "featureStats": {
+     "meanJitter": 1.7202,
+     "meanWhite": 2.2092,
+     "meanWamp": 0.662,
+     "rtMean": 800,
+     "rtMin": 66.67,
+     "rtCv": 0.3219,
+     "marginCv": 0.78
+    }
+   }
+  }
+ },
+ {
+  "scenario": {
+   "name": "generative-organic-trusted",
+   "mode": "generative",
+   "hw": true,
+   "organic": true
+  },
+  "snapshots": {
+   "60s": {
+    "overall": 0.1913,
+    "ready": true,
+    "verdict": "HUMAN",
+    "signals": {
+     "reaction time": {
+      "sus": 0.55,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0.3,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 0,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": false
+     },
+     "behavior texture": {
+      "sus": 0,
+      "ready": false
+     },
+     "event integrity": {
+      "sus": 0,
+      "ready": true
+     }
+    },
+    "flags": [
+     "superhuman reaction floor: 83ms"
+    ],
+    "counters": {
+     "dodges": 6,
+     "deaths": 3,
+     "moves": 12,
+     "swipes": 12,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 4,
+     "cashouts": 1
+    },
+    "featureStats": {
+     "meanJitter": 1.7017,
+     "meanWhite": 1.6316,
+     "meanWamp": 0.4676,
+     "rtMean": 594.44,
+     "rtMin": 83.33,
+     "rtCv": 0.5436,
+     "marginCv": 0.6093
+    }
+   },
+   "120s": {
+    "overall": 0.62,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0.55,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0.3,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 0,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": true
+     },
+     "behavior texture": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "event integrity": {
+      "sus": 0,
+      "ready": true
+     }
+    },
+    "flags": [
+     "superhuman reaction floor: 83ms",
+     "never enters contested space across 22 moves (lookahead-verified play)"
+    ],
+    "counters": {
+     "dodges": 13,
+     "deaths": 6,
+     "moves": 22,
+     "swipes": 22,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 7,
+     "cashouts": 1
+    },
+    "featureStats": {
+     "meanJitter": 1.6268,
+     "meanWhite": 1.6854,
+     "meanWamp": 0.4642,
+     "rtMean": 666.67,
+     "rtMin": 83.33,
+     "rtCv": 0.5154,
+     "marginCv": 0.7478
+    }
+   },
+   "180s": {
+    "overall": 0.62,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0.55,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0.3,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 0,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": true
+     },
+     "behavior texture": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "event integrity": {
+      "sus": 0,
+      "ready": true
+     }
+    },
+    "flags": [
+     "superhuman reaction floor: 83ms",
+     "never enters contested space across 35 moves (lookahead-verified play)"
+    ],
+    "counters": {
+     "dodges": 18,
+     "deaths": 7,
+     "moves": 35,
+     "swipes": 35,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 10,
+     "cashouts": 3
+    },
+    "featureStats": {
+     "meanJitter": 1.634,
+     "meanWhite": 1.7317,
+     "meanWamp": 0.4794,
+     "rtMean": 667.59,
+     "rtMin": 83.33,
+     "rtCv": 0.4952,
+     "marginCv": 0.7198
+    }
+   }
+  }
+ },
+ {
+  "scenario": {
+   "name": "generative-organic-untrusted",
+   "mode": "generative",
+   "hw": false,
+   "organic": true
+  },
+  "snapshots": {
+   "60s": {
+    "overall": 0.62,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0.55,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0.3,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 0.2848,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": false
+     },
+     "behavior texture": {
+      "sus": 0,
+      "ready": false
+     },
+     "event integrity": {
+      "sus": 0.8,
+      "ready": true
+     }
+    },
+    "flags": [
+     "superhuman reaction floor: 100ms",
+     "synthetic input events (isTrusted=false)"
+    ],
+    "counters": {
+     "dodges": 7,
+     "deaths": 3,
+     "moves": 13,
+     "swipes": 12,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 5,
+     "cashouts": 2
+    },
+    "featureStats": {
+     "meanJitter": 1.6251,
+     "meanWhite": 1.7769,
+     "meanWamp": 0.4856,
+     "rtMean": 733.33,
+     "rtMin": 100,
+     "rtCv": 0.4753,
+     "marginCv": 0.8883
+    }
+   },
+   "120s": {
+    "overall": 0.72,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0.55,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0.3,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 0.0029,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": true
+     },
+     "behavior texture": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "event integrity": {
+      "sus": 0.8,
+      "ready": true
+     }
+    },
+    "flags": [
+     "superhuman reaction floor: 100ms",
+     "never enters contested space across 25 moves (lookahead-verified play)",
+     "synthetic input events (isTrusted=false)"
+    ],
+    "counters": {
+     "dodges": 12,
+     "deaths": 5,
+     "moves": 25,
+     "swipes": 24,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 8,
+     "cashouts": 3
+    },
+    "featureStats": {
+     "meanJitter": 1.6167,
+     "meanWhite": 1.8355,
+     "meanWamp": 0.4932,
+     "rtMean": 733.33,
+     "rtMin": 100,
+     "rtCv": 0.4365,
+     "marginCv": 0.8177
+    }
+   },
+   "180s": {
+    "overall": 0.72,
+    "ready": true,
+    "verdict": "BOT",
+    "signals": {
+     "reaction time": {
+      "sus": 0.55,
+      "ready": true
+     },
+     "swipe kinematics": {
+      "sus": 0,
+      "ready": true
+     },
+     "noise character": {
+      "sus": 0.3,
+      "ready": true
+     },
+     "replay similarity": {
+      "sus": 0,
+      "ready": true
+     },
+     "perfection": {
+      "sus": 0,
+      "ready": true
+     },
+     "behavior texture": {
+      "sus": 0.7,
+      "ready": true
+     },
+     "event integrity": {
+      "sus": 0.8,
+      "ready": true
+     }
+    },
+    "flags": [
+     "superhuman reaction floor: 50ms",
+     "never enters contested space across 38 moves (lookahead-verified play)",
+     "synthetic input events (isTrusted=false)"
+    ],
+    "counters": {
+     "dodges": 18,
+     "deaths": 7,
+     "moves": 38,
+     "swipes": 37,
+     "aborts": 0,
+     "risks": 0,
+     "runEnds": 13,
+     "cashouts": 6
+    },
+    "featureStats": {
+     "meanJitter": 1.5868,
+     "meanWhite": 1.7775,
+     "meanWamp": 0.4711,
+     "rtMean": 735.19,
+     "rtMin": 50,
+     "rtCv": 0.4396,
+     "marginCv": 0.8261
+    }
+   }
+  }
+ }
+]
