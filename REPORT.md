@@ -4,7 +4,7 @@ An analysis of how a real-money mobile skill game gets attacked, what a
 client-side behavioral detector can and cannot catch, and why the economics —
 not the motor forensics — are what actually bind a bot.
 
-> **Scope and honesty.** The game here is an *original simulation* built from
+> **Scope.** The game here is an *original simulation* built from
 > public App Store screenshots of the "Drive" game in the Triumph Arcade app.
 > Nothing in this project reverse-engineers, decompiles, inspects, or runs
 > against Triumph's real app or servers, and nothing here is usable as a cheat
@@ -60,15 +60,13 @@ It is a model of a threat, not a clone of a product.
 
 ---
 
-## 3. The arms race, measured (read this first)
+## 3. Attacker vs detector, measured
 
-The honest headline is that **a competent attacker is never actioned by the
-client-side detector**, and the bench demonstrates it rather than hiding it.
-This is the most important property of the project: an anti-cheat pitch that
-overclaims is worse than useless to a team that has thought about this longer
-than we have. It cuts both ways — the precise result below is neither "the bot
-is invisible" nor "the detector wins", and both of those would have been easier
-to write.
+The main result: **a competent attacker is never actioned by the client-side
+detector**, and the bench demonstrates it. An anti-cheat pitch that overclaims
+is useless to a team that has thought about this longer than we have. The
+precise result below is neither "the bot is invisible" nor "the detector
+wins", and both of those would have been easier to write.
 
 Running each attacker for 180 s across 12 seeds (`pnpm batch`). Two columns
 matter and they are not the same number: the verdict at the *end* of the
@@ -125,17 +123,17 @@ need volume and this attacker supplies human-shaped volume. Against everything
 below T3 time is the defender's ally; at T3 it changes sides.
 
 The stealth attacker can still **transiently trip SUSPECT** (2 of 40 seeds in a
-wider sweep), falling back to HUMAN as more evidence accumulates. So the honest
-headline is not "invisible". It is: *the detector never gets enough to act on,
-and once in a while it gets just enough to ask a human to look.*
+wider sweep), falling back to HUMAN as more evidence accumulates. "Invisible"
+is too strong. The precise statement: *the detector never gets enough to act
+on, and once in a while it gets just enough to ask a human to look.*
 
 The residual grip is a single signal: on the seeds that flagged, it was
 "never enters contested space across N moves" — the stealth bot's deliberate
 risk-taking rate (0.7/min) is sometimes too low for the detector's window. An
 attacker who noticed that would raise it and pay a few more crashes.
 
-That is the ceiling of client-side behavioral detection. What survives it is not
-a better forensic signal — it is the economics.
+That is the ceiling of client-side behavioral detection. What survives it is
+the economics, not a better forensic signal.
 
 ---
 
@@ -303,7 +301,7 @@ visible expected-value hint, better onboarding) narrows the exploitable margin.
 That is an unusual place to find an anti-cheat lever, and it is cheaper than any
 detector.
 
-**The honest bottom line.** The claim "there is no profitable-and-hidden zone"
+**Bottom line.** The claim "there is no profitable-and-hidden zone"
 survives, but conditionally, and the conditions are now stated: it holds under a
 head-to-head rule where a forfeited run banks nothing *and* ties are raked, and it
 holds against opposition that plays its scoring rule correctly. Change either and
@@ -321,9 +319,8 @@ A 7-day cadence simulation of three account profiles:
 | scheduled bot | 371 | 0.52 | 14/24 | 23.6 h |
 
 The naive farm is trivially caught (rigid cadence, no sleep block). But the
-honest result is that the **scheduled bot passes every cadence check** —
-mimicking a circadian curve and log-normal session gaps costs an attacker almost
-nothing except throughput. Cadence analysis filters lazy farms; only the economy
+**scheduled bot passes every cadence check**: mimicking a circadian curve and
+log-normal session gaps costs an attacker almost nothing except throughput. Cadence analysis filters lazy farms; only the economy
 closes the door on a competent one, because throttling to a human-looking 371
 games/week is fine for the attacker, but throttling the *win rate* is not.
 
@@ -333,7 +330,7 @@ games/week is fine for the attacker, but throttling the *win rate* is not.
 
 Every threshold above is a first-principles prior until fitted to measured data.
 The calibration pipeline (`lib/detect/roc.ts`, `scripts/calibrate.ts`, run with
-`pnpm calibrate`) does the honest version:
+`pnpm calibrate`) works like this:
 
 1. Load a real human swipe corpus (recorded with `recorder/index.html`) as the
    negative class.
@@ -404,11 +401,11 @@ is ready and regenerates with a single command.
   demonstrates that the client-side signals are defeatable in principle by an
   attacker who models motor noise and reaction timing correctly; a real one
   would face device attestation this bench does not simulate.
-- **"Never actioned" is not "never noticed."** The stealth attacker trips the
-  SUSPECT review tier on 2 of 12 seeds. A defender who staffs a review queue —
-  rather than only auto-banning at the BOT tier — recovers some signal from
-  exactly those seeds. That is a real, if narrow, defensive foothold and the
-  measurement is reported rather than rounded away.
+- **"Never actioned" is not "never noticed."** The stealth attacker transiently
+  trips the SUSPECT review tier on 2 of 40 seeds in a wider sweep. A defender
+  who staffs a review queue, rather than only auto-banning at the BOT tier,
+  recovers some signal from exactly those sessions. That is a real, if narrow,
+  defensive foothold.
 - **Every attacker/detector number here is measured at 180 s or 600 s of a
   single account.** Nothing in this bench models an attacker who tunes against
   the detector over weeks, which is the realistic adversary.

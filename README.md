@@ -2,9 +2,9 @@
 
 A behavioral anti-cheat **test bench** for real-money mobile skill games, built
 around an original simulation of a lane-change driving game. It demonstrates the
-attacker ladder against such a game — including an attacker that defeats the
-whole client-side detector — and makes the honest argument that the *economics*,
-not the motor forensics, are what actually bind a bot.
+attacker ladder against such a game, up to an attacker that defeats the whole
+client-side detector, and shows that the *economics*, not the motor forensics,
+are what actually bind a bot.
 
 **Live: [laneguard.joshuakappler.com](https://laneguard.joshuakappler.com)** ·
 [read the analysis →](./REPORT.md) · live writeup at `/writeup`
@@ -33,8 +33,7 @@ Here the naive scripted bot is caught three minutes in: five red flags, BOT at
 ![Run page: the naive scripted bot called BOT](docs/shots/run-naive-bot.png)
 
 The stealth camouflage bot on the same detector: every signal green, the
-confidence line never near a cut, HUMAN across the whole session. The project
-is built around reporting this honestly.
+confidence line never near a cut, HUMAN across the whole session.
 
 ![Run page: the stealth camouflage bot reading HUMAN](docs/shots/run-stealth-human.png)
 
@@ -97,13 +96,12 @@ matters.
 The stealth bot uses organic motor noise (pink 1/f + tremor + drift), ex-Gaussian
 reaction times gated to threat onset, deliberate imperfect play (it enters
 contested space and genuinely crashes for it, and fakes aborted gestures), and a
-human banking discipline. That last one is not cosmetic: cashing out retires the
-"never banks a run" texture flag, so adding it made the attacker simultaneously
+human banking discipline. Banking changes two numbers at once: cashing out
+retires the "never banks a run" texture flag, so adding it made the attacker
 *better at winning* (head-to-head win rate 49-53% → 54-58% across the modeled
 fields) and *quieter* (SUSPECT touches 12.5% → 5% of seeds over a 40-seed
-sweep, ever-BOT 0 both ways). Defenders should expect a competent attacker to look **more** normal as it
-gets stronger, not less — which is the wrong way round for anyone hoping better
-play is itself a tell.
+sweep, ever-BOT 0 both ways). A competent attacker looks **more** normal as it
+gets stronger, so better play is not itself a tell.
 
 Three minutes doesn't separate the last two rungs, so run both to 10 minutes
 (`pnpm batch --duration 600`):
@@ -116,8 +114,7 @@ Three minutes doesn't separate the last two rungs, so run both to 10 minutes
 Given time the detector *does* win against the evasive bot (2/12 seeds at three
 minutes → 10/12 at ten). The stealth rung breaks that trend: 0/12 however long
 it runs, with confidence falling as the session grows. It can still transiently
-trip the SUSPECT review tier (2 of 40 seeds in a wider sweep), and the writeup
-says so rather than rounding it off. Keeping that honest is the point.
+trip the SUSPECT review tier (2 of 40 seeds in a wider sweep).
 
 ## Why the economy wins
 
@@ -135,8 +132,8 @@ double-forfeit ties settle — the attacker's measured ceiling against the
 strongest opposition is **56.5%** (head-to-head rule) or **52.0%** (leaderboard
 rule), both well under the rake wall and both losing money.
 
-The claim "there is no profitable-and-hidden zone" survives, but it is
-conditional, and the conditions are worth more than the claim:
+The claim "there is no profitable-and-hidden zone" survives, but only under
+conditions worth spelling out:
 
 - **Ties are an anti-cheat control.** Refunding double-forfeits yields 16
   policies that are profitable, under 3σ, and never actioned. Raking them yields

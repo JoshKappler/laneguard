@@ -158,9 +158,9 @@ export function RocPanel() {
                 style={{ color: "var(--ink-3)", border: "1px dashed var(--line)", borderRadius: 4, padding: 12, background: "var(--bg)" }}
               >
                 The pipeline is built and unit-tested (lib/detect/roc.ts, scripts/calibrate.ts). The
-                AUC matrix it produces is designed to expose, not hide, that the evasive and stealth
-                attackers are not separable on any swipe-level feature. That is the arms-race result,
-                not a bug to tune away.
+                AUC matrix it produces will show that the evasive and stealth attackers are not
+                separable on any swipe-level feature. That is a real property of those attackers,
+                not a bug in the pipeline.
               </div>
             </div>
             <div style={{ flex: "2 1 460px", minWidth: 260 }}>

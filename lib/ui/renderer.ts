@@ -34,11 +34,14 @@ const DASH_PERIOD = 2.19, DASH_LEN = 1.07, DASH_HW = 0.016;
 const GREEN_L = 2.568, GREEN_R = 2.602;
 const RAINBOW_R = 0.43; // right edge of the rainbow lane surface
 
-const BAR_HALF_W = 0.068, BAR_HALF_L = 1.0, BAR_H = 1.45, BAR_PERIOD = 6.5;
+const BAR_HALF_W = 0.068, BAR_HALF_L = 0.9, BAR_H = 1.0, BAR_PERIOD = 8.8;
 
 const ASPHALT = "#736d6c";
 const GROUND = "#bdaf83";
 const GREEN = "#0edb0c";
+
+// road-space texture for the flat CASHOUT lettering; em measured at 0.70 lanes
+const CASH = { word: "CASHOUT", slot: 1.26, period: 18.1, latHalf: 0.48, texW: 200, texH: 640, em: 120 };
 
 export interface Particle {
   x: number; y: number; vx: number; vy: number;
@@ -82,6 +85,8 @@ export class Renderer {
   fx: ViewFx;
   private puffSeed = 0xf1a2;
   private playerScreenY = YH + AMP;
+  private cashTex: HTMLCanvasElement | null = null;
+  private cashTexReal = false;
 
   constructor(ctx: CanvasRenderingContext2D, e: Engine, fx: ViewFx) {
     this.ctx = ctx;
@@ -327,33 +332,71 @@ export class Renderer {
 
   // Painted in the cashout lane reading far-to-near, glyph tops toward the
   // road, each letter sized at its own depth.
+  private zOf(y: number) {
+    return D0 * (AMP / (y - YH) - 1);
+  }
+
+  /*
+   * CASHOUT lies flat on the asphalt like the reference. The word is
+   * rasterized once into a road-space texture (x across the lane, y along z
+   * toward the viewer) and blitted in 2 px horizontal strips, each sampled at
+   * its own depth, so the glyphs foreshorten with the road.
+   */
+  private buildCashTex() {
+    const C = CASH;
+    const real = typeof document !== "undefined" && !!document.fonts?.check?.("40px 'Luckiest Guy'");
+    if (this.cashTex && (this.cashTexReal || !real)) return;
+    const cv = document.createElement("canvas");
+    cv.width = C.texW;
+    cv.height = C.texH;
+    const t = cv.getContext("2d")!;
+    const wordLen = C.word.length * C.slot;
+    const pxPerLat = C.texW / (C.latHalf * 2);
+    t.fillStyle = GREEN;
+    t.textAlign = "center";
+    t.textBaseline = "middle";
+    t.font = (C.em / LANE_W) * pxPerLat + "px " + FONT;
+    for (let i = 0; i < C.word.length; i++) {
+      const zc = (i + 0.5) * C.slot;
+      t.save();
+      t.translate(C.texW / 2, ((wordLen - zc) / wordLen) * C.texH);
+      t.rotate(Math.PI / 2);
+      t.fillText(C.word[C.word.length - 1 - i], 0, 0);
+      t.restore();
+    }
+    this.cashTex = cv;
+    this.cashTexReal = real;
+  }
+
   private drawCashoutText() {
+    if (typeof document === "undefined") return;
+    this.buildCashTex();
+    const tex = this.cashTex;
+    if (!tex) return;
+    const C = CASH;
     const g = this.ctx;
-    const period = 18.1,
-      word = "CASHOUT",
-      slot = 1.26;
-    const off = this.e.state.dist % period;
-    g.fillStyle = GREEN;
-    g.textAlign = "center";
-    g.textBaseline = "middle";
+    const wordLen = C.word.length * C.slot;
+    const off = this.e.state.dist % C.period;
+    const lat0 = this.e.cashLane + 0.07 - C.latHalf;
+    const lat1 = this.e.cashLane + 0.07 + C.latHalf;
     for (let zi = 0; zi < 5; zi++) {
-      const z0 = zi * period - off + 3;
-      for (let i = 0; i < word.length; i++) {
-        const zc = z0 + (i + 0.5) * slot;
-        const p = this.proj(zc);
-        if (zc < -1 || p < 0.14) continue;
-        const a = this.pt(this.e.cashLane + 0.07, zc - 0.5),
-          b = this.pt(this.e.cashLane + 0.07, zc + 0.5);
-        g.save();
-        g.translate((a.x + b.x) / 2, (a.y + b.y) / 2);
-        g.rotate(Math.atan2(a.y - b.y, a.x - b.x));
-        g.font = 96 * p + "px " + FONT;
-        g.fillText(word[word.length - 1 - i], 0, 0);
-        g.restore();
+      const z0 = zi * C.period - off + 3;
+      const z1 = z0 + wordLen;
+      const zNear = Math.max(z0, this.zOf(this.H));
+      const zFar = Math.min(z1, 60);
+      if (zFar <= zNear) continue;
+      const yA = Math.max(0, Math.ceil(this.sy(zFar)));
+      const yB = Math.min(this.H, Math.floor(this.sy(zNear)));
+      for (let y = yA; y < yB; y += 2) {
+        const za = this.zOf(y);
+        const zb = this.zOf(Math.min(y + 2, yB));
+        const sy0 = ((z1 - za) / wordLen) * tex.height;
+        const sh = Math.max(((za - zb) / wordLen) * tex.height, 0.5);
+        const p = this.proj((za + zb) / 2);
+        const x0 = this.sx(lat0, p);
+        g.drawImage(tex, 0, sy0, tex.width, sh, x0, y, this.sx(lat1, p) - x0, 2);
       }
     }
-    g.textAlign = "start";
-    g.textBaseline = "alphabetic";
   }
 
   // Lane 0 is the rainbow lane: an opaque hue sweep along z, cycling 15.2
@@ -520,21 +563,21 @@ export class Renderer {
     this.drawCar(s.x, 0, yaw, PLAYER_COLOR, true);
   }
 
-  // Tall thin jersey-slab in deep red: dark near face over a darker base
-  // strip, lighter sides and top.
+  // Red block measured off the reference: bright top face, a light band at
+  // the top of the near face, dark lower near face.
   private drawBarrierBlock(b: Barrier) {
     const lat = b.boundary + 0.5;
     const zMid = (b.z0 + b.z1) / 2;
     const halfL = (b.z1 - b.z0) / 2;
     if (halfL <= 0) return;
-    const T = this.box(lat, zMid, 0, BAR_HALF_W, halfL, BAR_H, { body: "#970303", dark: "#7e0202", side: "#9b0303" });
+    const T = this.box(lat, zMid, 0, BAR_HALF_W, halfL, BAR_H, { body: "#970304", dark: "#a30303", side: "#8a0303" });
     const p = this.proj(zMid);
     if (p < 0.25) return;
     const rearAt = (u: number, hFrac: number) => {
       const top = this.topPt(T, u, 0);
       return { x: top.x, y: top.y + BAR_H * PXPM * p * (1 - hFrac) };
     };
-    this.poly([rearAt(0, 0.22), rearAt(1, 0.22), rearAt(1, 0), rearAt(0, 0)], "#690202");
+    this.poly([rearAt(0, 0.7), rearAt(1, 0.7), rearAt(1, 0), rearAt(0, 0)], "#5e0303");
   }
 
   private drawHitboxes() {

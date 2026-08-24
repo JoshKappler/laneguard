@@ -4,7 +4,7 @@
  *   human — session bursts placed by circadian weight, log-normal in-session gaps
  *   farm  — fixed ~45s cadence, 24/7, tiny jitter
  *   sched — a bot that mimics circadian placement + log-normal gaps + sleep
- * The honest result: the scheduled bot passes every cadence check. Cadence
+ * The result: the scheduled bot passes every cadence check. Cadence
  * analysis filters lazy farms; it does not stop a competent one.
  */
 import { mulberry32, gauss } from "@/lib/core/rng";

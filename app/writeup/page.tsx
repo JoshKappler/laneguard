@@ -83,7 +83,7 @@ export default function Writeup() {
         are what actually bind a bot.
       </P>
       <Note>
-        <strong>Scope and honesty.</strong> The game here is an <em>original simulation</em>, built by
+        <strong>Scope.</strong> The game here is an <em>original simulation</em>, built by
         eye from screenshots of the shipped &ldquo;Drive&rdquo; game taken on my own phone plus
         Triumph&apos;s public marketing and App Store images.
         Nothing in this project reverse-engineers, decompiles, inspects, or runs against Triumph&apos;s
@@ -148,12 +148,12 @@ export default function Writeup() {
         </figcaption>
       </figure>
 
-      <H n="02">The arms race, measured</H>
+      <H n="02">Attacker vs detector, measured</H>
       <P>
-        The honest headline: a competent attacker is never actioned by the client-side detector,
-        and the bench demonstrates it rather than hiding it. An anti-cheat pitch that overclaims is
-        worse than useless to a team that has thought about this problem longer than we have. It
-        cuts both ways, because the result below is neither &ldquo;the bot is invisible&rdquo; nor
+        The main result: a competent attacker is never actioned by the client-side detector,
+        and the bench demonstrates it. An anti-cheat pitch that overclaims is useless to a team
+        that has thought about this problem longer than we have. The result below is neither
+        &ldquo;the bot is invisible&rdquo; nor
         &ldquo;the detector wins&rdquo;. Each attacker ran 180&nbsp;s across 12 seeds. The verdict
         at the final tick and whether a tier was <em>ever</em> reached are different numbers; the
         second is the one enforcement acts on.
@@ -214,10 +214,9 @@ export default function Writeup() {
         T3, time is the defender&apos;s ally; at T3 it changes sides.
       </P>
       <P>
-        It does still transiently trip the SUSPECT review tier on 2 of those 12 seeds (at 67 and
-        73&nbsp;s) before falling back. So the honest statement is not that the bot is invisible.
-        The detector never gets enough to act on, and it occasionally gets just enough to ask a
-        human to look. The one residual grip is a single signal: on the seeds that flagged, it was
+        It can still transiently trip the SUSPECT review tier (2 of 40 seeds in a wider sweep)
+        before falling back. &ldquo;Invisible&rdquo; is too strong. The detector never gets enough
+        to act on, and it occasionally gets just enough to ask a human to look. The one residual grip is a single signal: on the seeds that flagged, it was
         &ldquo;never enters contested space&rdquo;, meaning the bot&apos;s deliberate risk rate of
         0.7/min was sometimes short of the detector&apos;s window. An attacker who noticed would
         raise it and pay a few more crashes. That is the ceiling of client-side behavioral detection.
@@ -354,7 +353,7 @@ export default function Writeup() {
         and a cheaper one than a detector.
       </P>
       <P>
-        So the claim survives, conditionally, and the conditions are worth more than the claim: there
+        So the claim survives only conditionally: there
         is no profitable-and-hidden zone under a must-bank rule with raked ties, against opposition
         that plays its own scoring rule correctly. Change any of those and a hidden profitable
         attacker appears. The rake wall is real, but it is a wall the operator has to keep in repair.
@@ -401,10 +400,10 @@ export default function Writeup() {
         Two more worth stating plainly. <strong>&ldquo;Never actioned&rdquo; is not &ldquo;never
         noticed&rdquo;</strong>: the stealth attacker still transiently trips the SUSPECT review tier
         (2 of 40 seeds in a wider sweep), so a defender who staffs a review queue rather than only
-        auto-banning at the BOT tier recovers some signal from exactly those sessions. That is a narrow but real foothold, and it is reported
-        here rather than rounded away. And every attacker number on this page is measured over 180 or
-        600&nbsp;s of a <em>single account</em>; nothing here models an adversary who tunes against the
-        detector over weeks, which is the realistic one.
+        auto-banning at the BOT tier recovers some signal from exactly those sessions. That is a
+        narrow but real foothold. And every attacker number on this page is measured over 180 or
+        600&nbsp;s of a <em>single account</em>; nothing here models an adversary who tunes against
+        the detector over weeks, which a real one would.
       </P>
 
       </article>

@@ -23,7 +23,7 @@ const serif = IBM_Plex_Serif({
 
 const title = "LaneGuard: behavioral anti-cheat bench for skill-money games";
 const description =
-  "An honest, measured anti-cheat test bench: an original simulation of a lane-change money game, three attacker tiers (one that defeats the whole client-side detector), a 7-signal behavioral detector, and the economic argument that actually binds a bot.";
+  "A measured anti-cheat test bench: an original simulation of a lane-change money game, three attacker tiers (one that defeats the whole client-side detector), a 7-signal behavioral detector, and the economic argument that actually binds a bot.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://laneguard.joshuakappler.com"),

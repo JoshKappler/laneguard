@@ -616,7 +616,7 @@ export const PRESETS: Preset[] = [
     id: "stealth-camouflage",
     label: "Stealth camouflage bot",
     description:
-      "The full kit: organic noise, ex-Gaussian reaction times gated to threat onset, deliberate contested-space entries and aborted gestures, and a human banking discipline. Beats the entire client-side detector — at a measurable cost in crashes, which is the point.",
+      "The full kit: organic noise, ex-Gaussian reaction times gated to threat onset, deliberate contested-space entries and aborted gestures, and a human banking discipline. Beats the entire client-side detector, at a measurable cost in crashes.",
     logLine:
       "PRESET: stealth camouflage — the client-side detector should stay HUMAN; the economy layer is what's left",
     config: {
@@ -636,8 +636,7 @@ export const PRESETS: Preset[] = [
          * It also makes the attacker QUIETER, not louder: banking retires the
          * "never banks a run" texture flag, so SUSPECT touches drop from 12.5%
          * of seeds to 5% (40 seeds) while BOT stays at 0%. A bot that cashes out like a
-         * human is both harder to see and better at winning, which is the
-         * uncomfortable part.
+         * human is both harder to see and better at winning.
          */
         cashout: { target: 30 },
       },
