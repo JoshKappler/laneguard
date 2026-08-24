@@ -396,7 +396,7 @@ export default function Writeup() {
       </P>
       <P>
         Two more worth stating plainly. <strong>&ldquo;Never actioned&rdquo; is not &ldquo;never
-        noticed&rdquo;</strong> — the stealth attacker trips the SUSPECT review tier on 3 of 12 seeds,
+        noticed&rdquo;</strong> — the stealth attacker trips the SUSPECT review tier on 2 of 12 seeds,
         so a defender who staffs a review queue rather than only auto-banning at the BOT tier recovers
         some signal from exactly those seeds. That is a narrow but real foothold, and it is reported
         here rather than rounded away. And every attacker number on this page is measured over 180 or

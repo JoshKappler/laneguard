@@ -162,7 +162,7 @@ the signal separates humans from a given attacker class at all.
 6. **Behavior texture** — session habits automation skips: aborted gestures,
    entering contested space and *paying* for it, actually banking runs. Catches
    T2+; **mostly defeated by T3**, which manufactures all three — this is the
-   one signal that still lands on T3 at all, flagging on 3 of 12 seeds when its
+   one signal that still lands on T3 at all, flagging on 2 of 12 seeds when its
    contested-space rate happens to fall short of the detector's window.
 7. **Event integrity** — synthetic-event provenance (`isTrusted`), coordinate
    granularity. Cheap to spoof at the OS level, so corroborating only — it goes
@@ -381,12 +381,30 @@ is ready and regenerates with a single command.
   plausible priors, not fitted to Triumph's real player distribution. They argue
   a structural point (the rake wall) that is robust to the exact parameters, but
   the specific percentiles would move on real data.
+- **The head-to-head field is surrogate, and this is §5a's biggest weakness.**
+  The "players" it measures the attacker against are the *same planner* with
+  degraded reaction times, injected execution error, and varied banking
+  discipline — so strictly, §5a measures a bot beating worse bots, not a bot
+  beating humans. Three things are worth knowing about how far that goes. It is
+  a real ordering: the modeled skill axis is monotone (a strong draw banks more
+  often than a weak one, asserted in `test/headtohead.test.ts`), so the field is
+  a genuine ladder rather than noise. It is deliberately conservative in one
+  place — all-play-all rather than skill-banded matchmaking, which widens the
+  population's win-rate spread and therefore *shrinks* the attacker's z-score.
+  And it is load-bearing in the direction that matters least: the headline
+  conclusions are about the *shape* of the surface (raking ties removes the
+  hidden-profitable region; the scoring rule sets the population spread), which
+  is driven by the rules and the tie structure, not by how human the field is.
+  What a real corpus would change is the absolute win-rate ceilings — 56.5% and
+  52.0% are the numbers to distrust first. Humans also have strategy modes this
+  planner has none of: tilt, learning within a session, and quitting while
+  ahead.
 - **The stealth attacker is a model**, not a captured real-world bot. It
   demonstrates that the client-side signals are defeatable in principle by an
   attacker who models motor noise and reaction timing correctly; a real one
   would face device attestation this bench does not simulate.
 - **"Never actioned" is not "never noticed."** The stealth attacker trips the
-  SUSPECT review tier on 3 of 12 seeds. A defender who staffs a review queue —
+  SUSPECT review tier on 2 of 12 seeds. A defender who staffs a review queue —
   rather than only auto-banning at the BOT tier — recovers some signal from
   exactly those seeds. That is a real, if narrow, defensive foothold and the
   measurement is reported rather than rounded away.
@@ -398,5 +416,9 @@ is ready and regenerates with a single command.
 ---
 
 *Reproduce every number here with `pnpm test` (parity + behavior), `pnpm batch`
-(the tables), and `pnpm calibrate` (the ROC pipeline). The git history is part of
-the method: the physics took several instrumented debugging rounds to get right.*
+(the attacker/economy/cadence tables), `pnpm evo` (§5a — the 1.2M-run
+head-to-head sweep, about a minute on 14 workers) and `pnpm calibrate` (the ROC
+pipeline). All four are deterministic: same seeds in, same tables out, so a
+skeptic re-running them gets these figures and not merely similar ones. The git
+history is part of the method: the physics took several instrumented debugging
+rounds to get right, and so did the planner bug §5a turned up.*
