@@ -144,7 +144,7 @@ export function CadencePanel() {
           </div>
         </div>
         <div className="mono tiny muted" style={{ marginTop: 8 }}>
-          the naive farm is trivially caught (rigid cadence, no sleep) — but the scheduled bot passes every cadence check.
+          the naive farm is trivially caught (rigid cadence, no sleep). The scheduled bot passes every cadence check.
           cadence filters lazy farms; the economy is what binds a competent one.
         </div>
       </div>

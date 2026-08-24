@@ -48,7 +48,7 @@ function drawSwipe(canvas: HTMLCanvasElement, f: SwipeView) {
   g.strokeStyle = p.bad;
   g.beginPath(); g.arc(X(pts[pts.length - 1]), Y(pts[pts.length - 1]), 6, 0, Math.PI * 2); g.stroke();
   g.fillStyle = p.ink3; g.font = monoFont(10); g.textAlign = "left";
-  g.fillText("path (screen px) — brightness = speed", 10, 12);
+  g.fillText("path (screen px), brightness = speed", 10, 12);
 
   // velocity profile strip (single hue)
   const vy0 = Hc - 60;
@@ -86,7 +86,7 @@ export function SwipeInspector({ controller, version }: { controller: BenchContr
         ["velocity peak", selected.peakT.toFixed(3)],
         ["integer-coord frac", (selected.intFrac * 100).toFixed(0) + " %"],
         ["provenance", selected.trusted ? "trusted" : "SYNTHETIC", !selected.trusted],
-        ["nn shape dist", selected.nn ? selected.nn.sd.toFixed(4) + " (#" + selected.nn.seq + ")" : "—", !!selected.replayMatch],
+        ["nn shape dist", selected.nn ? selected.nn.sd.toFixed(4) + " (#" + selected.nn.seq + ")" : "n/a", !!selected.replayMatch],
         ["classification", selected.replayMatch ? "REPLAY MATCH" : "unique", !!selected.replayMatch],
       ]
     : [];
@@ -109,7 +109,7 @@ export function SwipeInspector({ controller, version }: { controller: BenchContr
                 <span className={"v" + (r[2] ? " hot" : "")}>{r[1]}</span>
               </div>
             ))}
-            {!selected && <span className="muted tiny">no swipes yet — play, or start a bot</span>}
+            {!selected && <span className="muted tiny">no swipes yet; play, or start a bot</span>}
           </div>
         </div>
 

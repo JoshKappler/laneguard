@@ -22,7 +22,7 @@ const PRIORS: { cut: string; value: string; basis: string }[] = [
     cut: "jitter floor",
     value: `${D.kinematics.jitterNone} px`,
     basis:
-      "a finger cannot trace a path this clean — below this is a generated curve, not a hand. Not fitted; the human side of the boundary is unmeasured",
+      "a finger cannot trace a path this clean. Below this is a generated curve, not a hand. Not fitted; the human side of the boundary is unmeasured",
   },
   {
     cut: "Δ⁴/Δ² whiteness",
@@ -34,7 +34,7 @@ const PRIORS: { cut: string; value: string; basis: string }[] = [
     cut: "replay shape duplicate",
     value: `${D.replay.shapeDupe}`,
     basis:
-      "normalized-path distance at which two swipes are the same gesture. Chosen by eye against the bench's own replay attacker — the weakest-justified number here",
+      "normalized-path distance at which two swipes are the same gesture. Chosen by eye against the bench's own replay attacker, the weakest-justified number here",
   },
   {
     cut: "SUSPECT / BOT cuts",
@@ -89,7 +89,7 @@ function AucMatrix({ matrix }: { matrix: Record<string, Record<string, number>> 
   const feats = Object.keys(matrix);
   const cols = feats.length ? Object.keys(matrix[feats[0]]) : [];
   const cell = (v: number) => {
-    if (Number.isNaN(v)) return { bg: "var(--surface-2)", fg: "var(--ink-3)", t: "—" };
+    if (Number.isNaN(v)) return { bg: "var(--surface-2)", fg: "var(--ink-3)", t: "n/a" };
     // sequential accent ramp by |auc-0.5| (separability), text stays ink
     const sep = Math.abs(v - 0.5) * 2;
     return { bg: `rgba(61,220,255,${(0.08 + sep * 0.5).toFixed(2)})`, fg: "var(--ink)", t: v.toFixed(2) };
@@ -136,7 +136,7 @@ export function RocPanel() {
         <span className="dim">
           {calibrated
             ? `${cal.humanCorpus.swipes} human swipes · FPR ≤ ${(cal.fprTarget * 100).toFixed(2)}%`
-            : "first-principles priors — no corpus yet"}
+            : "first-principles priors, no corpus yet"}
         </span>
       </div>
       <div className="panel-body">
@@ -150,7 +150,7 @@ export function RocPanel() {
                 drop the JSON in <span className="mono">corpus/</span>, and run{" "}
                 <span className="mono" style={{ color: "var(--accent)" }}>pnpm calibrate</span>. This
                 panel then shows a per-signal ROC/AUC against each attacker class and the thresholds
-                chosen at FPR ≤ 0.1% — a false ban withholds a real player&apos;s money, so FPR is the
+                chosen at FPR ≤ 0.1%, because a false ban withholds a real player&apos;s money, so FPR is the
                 budget being spent.
               </p>
               <div
@@ -159,7 +159,7 @@ export function RocPanel() {
               >
                 The pipeline is built and unit-tested (lib/detect/roc.ts, scripts/calibrate.ts). The
                 AUC matrix it produces is designed to expose, not hide, that the evasive and stealth
-                attackers are not separable on any swipe-level feature — that is the arms-race result,
+                attackers are not separable on any swipe-level feature. That is the arms-race result,
                 not a bug to tune away.
               </div>
             </div>
@@ -191,7 +191,7 @@ export function RocPanel() {
                 .filter(([, f]) => f.curve)
                 .map(([name, f]) => <RocMini key={name} f={f} name={name} />)}
             </div>
-            <div className="mono tiny muted" style={{ marginBottom: 6 }}>AUC matrix — feature × attacker class (0.5 = indistinguishable)</div>
+            <div className="mono tiny muted" style={{ marginBottom: 6 }}>AUC matrix by feature and attacker class (0.5 = indistinguishable)</div>
             <AucMatrix matrix={cal.aucMatrix} />
             <div className="mono tiny muted" style={{ marginTop: 8, maxWidth: "70ch" }}>{cal.note}</div>
           </div>

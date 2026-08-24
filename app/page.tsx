@@ -29,8 +29,9 @@ export default function SetupPage() {
         </div>
       )}
       <footer className="muted tiny" style={{ marginTop: 20, textAlign: "center", lineHeight: 1.7, maxWidth: 820, marginInline: "auto" }}>
-        The game is an original simulation built from public screenshots — no third-party code or
-        assets, and nothing here reverse-engineers, inspects, or runs against Triumph&apos;s real app.
+        The game is an original simulation, built by eye from screenshots of the shipped game. No
+        third-party code or assets, and nothing here reverse-engineers, inspects, or runs against
+        Triumph&apos;s real app.
         The detector runs client-side for visibility; the design is server-side. Thresholds are
         first-principles priors until calibrated on a real human corpus.
       </footer>
