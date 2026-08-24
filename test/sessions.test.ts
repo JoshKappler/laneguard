@@ -130,7 +130,7 @@ describe("stealth camouflage bot (the new rung)", () => {
   });
 
   // The other half of the honest claim. Across the batch seeds the stealth bot
-  // ends HUMAN 12/12 and reaches BOT 0/12, but does touch SUSPECT on 3/12. If a
+  // ends HUMAN 12/12 and reaches BOT 0/12, but does touch SUSPECT on 1/12. If a
   // future change silently drove that to 0 the docs would be overclaiming, and
   // if it drove it up the "never actioned" thesis would be weakening — pin both
   // ends. Seeds match scripts/batch.ts so the number is the documented one.
@@ -145,7 +145,7 @@ describe("stealth camouflage bot (the new rung)", () => {
       await new Promise((res) => setTimeout(res, 0));
     }
     expect(human).toBe(12);
-    expect(suspect).toBe(3);
+    expect(suspect).toBe(1);
   });
 
   test("camouflage behaviors actually happen and cost something (seed 1337)", { timeout: 30000 }, () => {

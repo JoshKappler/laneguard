@@ -25,7 +25,7 @@ replay-farm corpus.
 **Run**: the game beside a ghost phone that traces each swipe in red at the
 speed it actually happened, one-line signal bars, detector confidence over the
 whole session against the SUSPECT/BOT cuts, and every completed run as a cell.
-Here the naive scripted bot is caught: four smoking-gun flags, BOT at 75%
+Here the naive scripted bot is caught: three smoking-gun flags, BOT at 75%
 confidence.
 
 ![Run page: the naive scripted bot called BOT](docs/shots/run-naive-bot.png)
@@ -89,17 +89,17 @@ matters.
 |---|---|---|---|---|
 | naive scripted | **BOT 100%** | 0/12 | **12/12** | kinematics (jitter ≈ 0) + event provenance, in seconds |
 | replay farm (injected) | **BOT 100%** | 0/12 | **12/12** | replay similarity — repeats in shape *and* timing |
-| evasive generative | BOT 17% | 9/12 | **5/12** | organic noise beats motor forensics; texture catches it slowly |
-| **stealth camouflage** | **HUMAN 12/12** | 2/12 | **0/12** | **never actioned by the client-side detector** |
+| evasive generative | BOT 8% | 11/12 | **2/12** | organic noise beats motor forensics; texture catches it slowly |
+| **stealth camouflage** | **HUMAN 12/12** | 0/12 | **0/12** | **never actioned by the client-side detector** |
 
 The stealth bot uses organic motor noise (pink 1/f + tremor + drift), ex-Gaussian
 reaction times gated to threat onset, deliberate imperfect play (it enters
 contested space and genuinely crashes for it, and fakes aborted gestures), and a
 human banking discipline. That last one is not cosmetic: cashing out retires the
 "never banks a run" texture flag, so adding it made the attacker simultaneously
-*better at winning* (head-to-head win rate 49–53% → 54–58% across the modeled
-fields) and *quieter* (SUSPECT touches 37.5% → 25% of seeds, ever-BOT unchanged
-at 0). Defenders should expect a competent attacker to look **more** normal as it
+*better at winning* (head-to-head win rate 49-53% → 54-58% across the modeled
+fields) and *quieter* (SUSPECT touches 12.5% → 5% of seeds over a 40-seed
+sweep, ever-BOT 0 both ways). Defenders should expect a competent attacker to look **more** normal as it
 gets stronger, not less — which is the wrong way round for anyone hoping better
 play is itself a tell.
 
@@ -108,14 +108,14 @@ Three minutes doesn't separate the last two rungs, so run both to 10 minutes
 
 | attacker | verdict at 600 s | ever SUSPECT | ever BOT | mean conf |
 |---|---|---|---|---|
-| evasive generative | **BOT 83%** | 9/12 | **10/12** | 0.58 |
-| **stealth camouflage** | **HUMAN 12/12** | 2/12 | **0/12** | **0.04** |
+| evasive generative | **BOT 83%** | 11/12 | **10/12** | 0.55 |
+| **stealth camouflage** | **HUMAN 12/12** | 0/12 | **0/12** | **0.05** |
 
-Given time the detector *does* win against the evasive bot (5/12 seeds at three
-minutes → 10/12 at ten). The stealth rung breaks that trend — 0/12 however long
-it runs, with confidence falling as the session grows. It does transiently trip
-the SUSPECT review tier on 2/12 seeds, and the writeup says so rather than
-rounding it off. Keeping that honest is the point.
+Given time the detector *does* win against the evasive bot (2/12 seeds at three
+minutes → 10/12 at ten). The stealth rung breaks that trend: 0/12 however long
+it runs, with confidence falling as the session grows. It can still transiently
+trip the SUSPECT review tier (2 of 40 seeds in a wider sweep), and the writeup
+says so rather than rounding it off. Keeping that honest is the point.
 
 ## Why the economy wins
 

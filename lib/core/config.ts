@@ -634,8 +634,8 @@ export const PRESETS: Preset[] = [
          * every modeled field — 54.4-57.9%, versus bank@12 which scores higher
          * against a weak field but collapses to 49.8% against a strong one.
          * It also makes the attacker QUIETER, not louder: banking retires the
-         * "never banks a run" texture flag, so SUSPECT touches drop from 37.5%
-         * of seeds to 25% while BOT stays at 0%. A bot that cashes out like a
+         * "never banks a run" texture flag, so SUSPECT touches drop from 12.5%
+         * of seeds to 5% (40 seeds) while BOT stays at 0%. A bot that cashes out like a
          * human is both harder to see and better at winning, which is the
          * uncomfortable part.
          */

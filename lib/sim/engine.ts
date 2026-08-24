@@ -198,10 +198,11 @@ export class Engine {
     if (rng() < cfg.cashTrafficFreq) s.cars.push(mkCar(this.cashLane));
 
     // Barrier trap: red blocks on a lane boundary, never on the boundary the
-    // guaranteed path needs to cross for this wave.
+    // guaranteed path needs to cross for this wave, and never on the cashout
+    // boundary (the shipped game keeps the cashout lane reachable).
     if (rng() < cfg.barrierFreq) {
       const options: number[] = [];
-      for (let b = 0; b < trafficLanes; b++) if (b !== needCross) options.push(b);
+      for (let b = 0; b < trafficLanes - 1; b++) if (b !== needCross) options.push(b);
       const b = options[(rng() * options.length) | 0];
       const len = 5 + rng() * 4;
       s.barriers.push({

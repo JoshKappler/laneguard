@@ -140,7 +140,7 @@ export default function Writeup() {
         </div>
         <figcaption style={{ ...serif, fontSize: 14, color: "var(--ink-2)", marginTop: 14, maxWidth: "70ch" }}>
           The simulation is built from the screenshots on the left of each pair, matched by
-          deliberate observation: the blurred rainbow shoulder, the rotated green CASHOUT lettering,
+          deliberate observation: the rainbow lane, the rotated green CASHOUT lettering,
           cartoon cars with a consistent light source, and the HUD. It models the visual and physical
           feel that makes the behavioral signals meaningful. It is not a clone of the product and had
           no access to one. Full provenance in <span className="mono">references/MANIFEST.md</span>.
@@ -160,17 +160,17 @@ export default function Writeup() {
       <Table
         head={["attacker", "verdict @180s", "ever SUSP", "ever BOT", "conf", "t→BOT", "jitter", "Δ⁴/Δ²", "RT floor"]}
         rows={[
-          ["naive scripted", "BOT 100%", "0/12", "12/12", "0.75", "30 s", "0.00", "0.00", "150 ms"],
-          ["replay farm (injected)", "BOT 100%", "0/12", "12/12", "0.75", "52 s", "1.82", "2.29", "260 ms"],
-          ["evasive generative", "BOT 17%", "9/12", "5/12", "0.33", "80 s *", "1.65", "1.76", "236 ms"],
-          ["stealth camouflage", "HUMAN 12/12", "2/12", "0/12", "0.06", "never", "1.62", "1.75", "251 ms"],
+          ["naive scripted", "BOT 100%", "0/12", "12/12", "0.75", "28 s", "0.00", "0.00", "129 ms"],
+          ["replay farm (injected)", "BOT 100%", "0/12", "12/12", "0.75", "50 s", "1.82", "2.28", "217 ms"],
+          ["evasive generative", "BOT 8%", "11/12", "2/12", "0.34", "130 s *", "1.63", "1.76", "215 ms"],
+          ["stealth camouflage", "HUMAN 12/12", "0/12", "0/12", "0.06", "never", "1.64", "1.74", "250 ms"],
         ]}
         hot={(r, c) => r === 3 && c === 3}
       />
       <P dim>
-        * median over the five seeds that reached BOT at all, not over all twelve. The evasive bot
-        <em> ends</em> the session called BOT on 17% of seeds but touches BOT on 42% and SUSPECT on
-        75%. Reading the final verdict alone understates the detector by more than half.
+        * median over the two seeds that reached BOT at all, not over all twelve. The evasive bot
+        <em> ends</em> the session called BOT on 8% of seeds but touches BOT on 17% and SUSPECT on
+        92%. Reading the final verdict alone understates the detector.
       </P>
       <P>
         The evasive generative bot defeats every swipe-level motor-forensics signal by modeling human
@@ -199,16 +199,16 @@ export default function Writeup() {
       <Table
         head={["attacker", "verdict @600s", "ever SUSP", "ever BOT", "conf", "t→BOT"]}
         rows={[
-          ["evasive generative", "BOT 83%", "9/12", "10/12", "0.58", "141 s"],
-          ["stealth camouflage", "HUMAN 12/12", "2/12", "0/12", "0.04", "never"],
+          ["evasive generative", "BOT 83%", "11/12", "10/12", "0.55", "319 s"],
+          ["stealth camouflage", "HUMAN 12/12", "0/12", "0/12", "0.05", "never"],
         ]}
         hot={(r, c) => r === 1 && c === 3}
       />
       <P>
         This is the result worth reading. Given enough time the detector <em>does</em> win against
-        the evasive bot: 5/12 seeds at three minutes becomes 10/12 at ten, because behavior texture
+        the evasive bot: 2/12 seeds at three minutes becomes 10/12 at ten, because behavior texture
         accumulates. The stealth rung breaks that trend. It sits at 0/12 however long the session
-        runs, and its confidence <em>falls</em> from 0.06 at three minutes to 0.04 at ten, because
+        runs, and its confidence <em>falls</em> from 0.06 at three minutes to 0.05 at ten, because
         the session-level signals need volume and this attacker supplies human-shaped volume. Below
         T3, time is the defender&apos;s ally; at T3 it changes sides.
       </P>

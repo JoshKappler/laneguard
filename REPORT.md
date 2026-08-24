@@ -78,17 +78,17 @@ balance the moment either fires.
 
 | attacker | verdict at 180 s | ever SUSPECT | ever BOT | mean conf | median t→BOT | jitter | Δ⁴/Δ² | RT floor |
 |---|---|---|---|---|---|---|---|---|
-| naive scripted (T0) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 30 s | 0.00 px | 0.00 | 150 ms |
-| replay farm (T1, injected) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 52 s | 1.82 px | 2.29 | 260 ms |
-| evasive generative (T2+) | BOT 17% | 9/12 | **5/12** | 0.33 | 80 s *(of the 5)* | 1.65 px | 1.76 | 236 ms |
-| **stealth camouflage (T3)** | **HUMAN 12/12** | 2/12 | **0/12** | **0.06** | never | 1.62 px | 1.75 | 251 ms |
+| naive scripted (T0) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 28 s | 0.00 px | 0.00 | 129 ms |
+| replay farm (T1, injected) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 50 s | 1.82 px | 2.28 | 217 ms |
+| evasive generative (T2+) | BOT 8% | 11/12 | **2/12** | 0.34 | 130 s *(of the 2)* | 1.63 px | 1.76 | 215 ms |
+| **stealth camouflage (T3)** | **HUMAN 12/12** | 0/12 | **0/12** | **0.06** | never | 1.64 px | 1.74 | 250 ms |
 
 The two smoking-gun tiers skip SUSPECT entirely — escalation takes them straight
 to BOT. The evasive bot is the interesting middle: it *ends* the session called
-BOT on only 17% of seeds, but it touches BOT at some point on 42% and SUSPECT on
-75%, so reading the final verdict alone understates the detector by more than
-half. Its median 80 s time-to-BOT is a median over the five seeds that got
-there, not over all twelve.
+BOT on only 8% of seeds, but it touches BOT at some point on 17% and SUSPECT on
+92%, so reading the final verdict alone understates the detector. Its median
+130 s time-to-BOT is a median over the two seeds that got there, not over all
+twelve.
 
 The naive bot is caught in seconds by kinematics (machine-clean swipes, jitter
 ≈ 0) and event provenance. The replay farm survives provenance blinding (its
@@ -113,21 +113,21 @@ equal terms:
 
 | attacker | verdict at 600 s | ever SUSPECT | ever BOT | mean conf | median t→BOT |
 |---|---|---|---|---|---|
-| evasive generative (T2+) | **BOT 83%** | 9/12 | **10/12** | 0.58 | 141 s *(of the 10)* |
-| **stealth camouflage (T3)** | **HUMAN 12/12** | 2/12 | **0/12** | **0.04** | never |
+| evasive generative (T2+) | **BOT 83%** | 11/12 | **10/12** | 0.55 | 319 s *(of the 10)* |
+| **stealth camouflage (T3)** | **HUMAN 12/12** | 0/12 | **0/12** | **0.05** | never |
 
 This is the result worth reading. Given enough time the detector *does* win
-against the evasive bot — 5/12 at three minutes becomes 10/12 at ten, because
+against the evasive bot — 2/12 at three minutes becomes 10/12 at ten, because
 behavior texture accumulates. The stealth rung is what breaks that trend: it
 sits at 0/12 no matter how long the session runs, and its confidence **falls**
-from 0.06 at three minutes to 0.04 at ten, because the session-level signals
+from 0.06 at three minutes to 0.05 at ten, because the session-level signals
 need volume and this attacker supplies human-shaped volume. Against everything
 below T3 time is the defender's ally; at T3 it changes sides.
 
-The stealth attacker does still **transiently trip SUSPECT on 2/12 seeds** (at
-67 s and 73 s), falling back to HUMAN as more evidence accumulates. So the
-honest headline is not "invisible". It is: *the detector never gets enough to
-act on, and on two seeds in twelve it gets just enough to ask a human to look.*
+The stealth attacker can still **transiently trip SUSPECT** (2 of 40 seeds in a
+wider sweep), falling back to HUMAN as more evidence accumulates. So the honest
+headline is not "invisible". It is: *the detector never gets enough to act on,
+and once in a while it gets just enough to ask a human to look.*
 
 The residual grip is a single signal: on the seeds that flagged, it was
 "never enters contested space across N moves" — the stealth bot's deliberate
