@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "LaneGuard — analysis",
+  title: "LaneGuard analysis",
   description:
     "How a real-money mobile skill game gets attacked, what a client-side behavioral detector can and cannot catch, and why the economics bind a bot.",
 };
@@ -78,7 +78,7 @@ export default function Writeup() {
       </h1>
       <P>
         An analysis of how a real-money mobile skill game gets attacked, what a client-side
-        behavioral detector can and cannot catch, and why the economics — not the motor forensics —
+        behavioral detector can and cannot catch, and why the economics, not the motor forensics,
         are what actually bind a bot.
       </P>
       <Note>
@@ -99,7 +99,7 @@ export default function Writeup() {
       <Table
         head={["tier", "capability", "what it beats"]}
         rows={[
-          ["T0 scripted", "reads state, perfect inputs", "nothing subtle — but ~90% of attempts"],
+          ["T0 scripted", "reads state, perfect inputs", "nothing subtle, but ~90% of attempts"],
           ["T1 replay", "records + replays human swipes", "jitter / kinematics"],
           ["T2 generative", "fresh synthetic swipe per dodge", "replay similarity"],
           ["T2+ organic", "models human motor-noise structure", "every swipe-level forensic"],
@@ -109,8 +109,8 @@ export default function Writeup() {
       />
       <P>
         The defender&apos;s constraint is asymmetric: a false positive withholds a real player&apos;s cash
-        balance. That makes false-positive rate the budget every threshold is spent against — and it
-        is why the strongest conclusion here needs no per-player forensics at all.
+        balance. That makes false-positive rate the budget every threshold is spent against. It is
+        also why the strongest conclusion here needs no per-player forensics at all.
       </P>
 
       <figure style={{ margin: "36px 0 8px" }}>
@@ -141,20 +141,20 @@ export default function Writeup() {
           The simulation is built from public App Store screenshots (left of each pair), matched by
           deliberate observation: the blurred rainbow shoulder, the rotated green CASHOUT lettering,
           cartoon cars with a consistent light source, and the HUD. It models the visual and physical
-          feel needed for the behavioral signals to be meaningful — not a clone of the product, and
-          with no access to it. Full provenance in <span className="mono">references/MANIFEST.md</span>.
+          feel that makes the behavioral signals meaningful. It is not a clone of the product and had
+          no access to one. Full provenance in <span className="mono">references/MANIFEST.md</span>.
         </figcaption>
       </figure>
 
       <H n="02">The arms race, measured</H>
       <P>
-        The honest headline is that a competent attacker is never actioned by the client-side
-        detector, and the bench demonstrates it rather than hiding it. An anti-cheat pitch that
-        overclaims is worse than useless to a team that has thought about this problem longer than
-        we have — and it cuts both ways, because the result below is neither &ldquo;the bot is
-        invisible&rdquo; nor &ldquo;the detector wins&rdquo;. Each attacker, 180&nbsp;s across 12
-        seeds. Note that the verdict at the final tick and whether a tier was <em>ever</em> reached
-        are different numbers; the second is the one enforcement acts on.
+        The honest headline: a competent attacker is never actioned by the client-side detector,
+        and the bench demonstrates it rather than hiding it. An anti-cheat pitch that overclaims is
+        worse than useless to a team that has thought about this problem longer than we have. It
+        cuts both ways, because the result below is neither &ldquo;the bot is invisible&rdquo; nor
+        &ldquo;the detector wins&rdquo;. Each attacker ran 180&nbsp;s across 12 seeds. The verdict
+        at the final tick and whether a tier was <em>ever</em> reached are different numbers; the
+        second is the one enforcement acts on.
       </P>
       <Table
         head={["attacker", "verdict @180s", "ever SUSP", "ever BOT", "conf", "t→BOT", "jitter", "Δ⁴/Δ²", "RT floor"]}
@@ -169,18 +169,18 @@ export default function Writeup() {
       <P dim>
         * median over the five seeds that reached BOT at all, not over all twelve. The evasive bot
         <em> ends</em> the session called BOT on 17% of seeds but touches BOT on 42% and SUSPECT on
-        75% — reading the final verdict alone understates the detector by more than half.
+        75%. Reading the final verdict alone understates the detector by more than half.
       </P>
       <P>
         The evasive generative bot defeats every swipe-level motor-forensics signal by modeling human
-        motor noise correctly — pink 1/f noise, an 8–12&nbsp;Hz physiological tremor, and low-frequency
-        drift — instead of the spectrally-white iid noise a naive bot injects:
+        motor noise correctly (pink 1/f noise, an 8-12&nbsp;Hz physiological tremor, and low-frequency
+        drift) instead of the spectrally white iid noise a naive bot injects:
       </P>
       <Table
         head={["noise model", "Δ⁴/Δ² whiteness", "caught by motor forensics?"]}
         rows={[
-          ["iid Gaussian (naive)", "2.21", "yes — injected noise is white"],
-          ["pink + tremor + drift (organic)", "1.76", "no — looks like a human hand"],
+          ["iid Gaussian (naive)", "2.21", "yes: injected noise is white"],
+          ["pink + tremor + drift (organic)", "1.76", "no: looks like a human hand"],
         ]}
         hot={(r, c) => r === 1 && c === 2}
       />
@@ -205,17 +205,17 @@ export default function Writeup() {
       />
       <P>
         This is the result worth reading. Given enough time the detector <em>does</em> win against
-        the evasive bot — 5/12 seeds at three minutes becomes 10/12 at ten, because behavior texture
-        accumulates. The stealth rung is what breaks that trend: 0/12 however long the session runs,
-        and its confidence <em>falls</em> from 0.06 at three minutes to 0.04 at ten, because the
-        session-level signals need volume and this attacker supplies human-shaped volume. Below T3,
-        time is the defender&apos;s ally; at T3 it changes sides.
+        the evasive bot: 5/12 seeds at three minutes becomes 10/12 at ten, because behavior texture
+        accumulates. The stealth rung breaks that trend. It sits at 0/12 however long the session
+        runs, and its confidence <em>falls</em> from 0.06 at three minutes to 0.04 at ten, because
+        the session-level signals need volume and this attacker supplies human-shaped volume. Below
+        T3, time is the defender&apos;s ally; at T3 it changes sides.
       </P>
       <P>
         It does still transiently trip the SUSPECT review tier on 2 of those 12 seeds (at 67 and
-        73&nbsp;s) before falling back, so the honest statement is not that the bot is invisible — it
-        is that the detector never gets enough to act on, and occasionally gets just enough to ask a
-        human to look. The one residual grip is a single signal: on the seeds that flagged it was
+        73&nbsp;s) before falling back. So the honest statement is not that the bot is invisible.
+        The detector never gets enough to act on, and it occasionally gets just enough to ask a
+        human to look. The one residual grip is a single signal: on the seeds that flagged, it was
         &ldquo;never enters contested space&rdquo;, meaning the bot&apos;s deliberate risk rate of
         0.7/min was sometimes short of the detector&apos;s window. An attacker who noticed would
         raise it and pay a few more crashes. That is the ceiling of client-side behavioral detection.
@@ -227,18 +227,18 @@ export default function Writeup() {
         first-principles priors until fitted to a human corpus at a stated FPR (§05).
       </P>
       <ul style={{ ...serif, fontSize: 16, lineHeight: 1.7, color: "var(--ink)", maxWidth: "68ch", paddingLeft: 22, marginBottom: 16 }}>
-        <li><strong>Reaction time</strong> — human RT is ex-Gaussian (a floor plus a heavy lapse tail); scripted play has a superhuman floor and a naive sampler is symmetric. <em>Catches T0.</em></li>
-        <li><strong>Swipe kinematics</strong> — motor-noise magnitude; clean synthetic swipes have jitter ≈ 0. <em>Catches T0.</em></li>
-        <li><strong>Noise character</strong> — Δ⁴/Δ² spectral whiteness; injected iid noise is white, human tremor is not. <em>Catches T2 iid; defeated by T2+ organic.</em></li>
-        <li><strong>Replay similarity</strong> — near-duplicate swipes in shape and timing. <em>Catches T1.</em></li>
-        <li><strong>Perfection</strong> — dodge-margin consistency and survival humans don&apos;t produce.</li>
-        <li><strong>Behavior texture</strong> — aborts, entering contested space and paying for it, banking runs. <em>Catches T2+; defeated by T3.</em></li>
-        <li><strong>Event integrity</strong> — synthetic-event provenance; corroborating only, zero under hardware injection.</li>
+        <li><strong>Reaction time</strong>: human RT is ex-Gaussian (a floor plus a heavy lapse tail); scripted play has a superhuman floor and a naive sampler is symmetric. <em>Catches T0.</em></li>
+        <li><strong>Swipe kinematics</strong>: motor-noise magnitude; clean synthetic swipes have jitter ≈ 0. <em>Catches T0.</em></li>
+        <li><strong>Noise character</strong>: Δ⁴/Δ² spectral whiteness; injected iid noise is white, human tremor is not. <em>Catches T2 iid; defeated by T2+ organic.</em></li>
+        <li><strong>Replay similarity</strong>: near-duplicate swipes in shape and timing. <em>Catches T1.</em></li>
+        <li><strong>Perfection</strong>: dodge-margin consistency and survival humans don&apos;t produce.</li>
+        <li><strong>Behavior texture</strong>: aborts, entering contested space and paying for it, banking runs. <em>Catches T2+; defeated by T3.</em></li>
+        <li><strong>Event integrity</strong>: synthetic-event provenance; corroborating only, zero under hardware injection.</li>
       </ul>
       <P>
         Aggregation is a weighted blend with escalation, so one smoking gun or several independent
-        suspicions override the average. Enforcement is tiered: one strong signal → SUSPECT (review);
-        convergent independent signals → BOT (act), because acting withholds money.
+        suspicions override the average. Enforcement is tiered: one strong signal queues a SUSPECT
+        review, and convergent independent signals act as BOT, because acting withholds money.
       </P>
 
       <H n="04">Why the economy is the real detector</H>
@@ -252,9 +252,9 @@ export default function Writeup() {
       <Table
         head={["bot win rate", "EV / game", "z-score", "players at or above (of 400)"]}
         rows={[
-          ["55%", "−$0.60", "1.3σ", "26 — loses money"],
+          ["55%", "−$0.60", "1.3σ", "26 (loses money)"],
           ["60%", "−$0.20", "2.6σ", "3"],
-          ["62.5%", "$0.00", "3.3σ", "2 — break-even"],
+          ["62.5%", "$0.00", "3.3σ", "2 (break-even)"],
           ["65%", "+$0.20", "3.9σ", "1"],
           ["70%", "+$0.60", "5.2σ", "1"],
           ["80%", "+$1.40", "7.8σ", "0"],
@@ -268,11 +268,11 @@ export default function Writeup() {
       </P>
       <P>
         Read that table for what it is: arithmetic <em>conditional</em> on a win rate, not a
-        measurement of one. It answers &ldquo;if an account sustained 70%, how loud would it
-        be&rdquo; — it does not show that any attacker can reach 70%. The design corollary still
-        holds: rank accounts by win-rate z-score against the population, then use the behavioral
-        signals as corroboration before acting, which keeps false-positive bans near zero. But the
-        win rate itself deserved measuring rather than assuming.
+        measurement of one. It answers how loud an account sustaining 70% would be; it does not show
+        that any attacker can reach 70%. The design corollary still holds: rank accounts by win-rate
+        z-score against the population, then use the behavioral signals as corroboration before
+        acting, which keeps false-positive bans near zero. But the win rate itself deserved
+        measuring rather than assuming.
       </P>
 
       <H n="04a">Measuring the win rate instead of assuming it</H>
@@ -281,8 +281,8 @@ export default function Writeup() {
         modeled field into head-to-head games and lets the win rate emerge from play:{" "}
         <strong>1,196,000 simulated runs</strong> across 5 fields × 160 players × 1,000 shared
         courses, and 99 attacker policies × 4 seeds. Both players in a match drive the{" "}
-        <em>same seeded course</em> — exactly, because the wave sequence is a pure function of the
-        world RNG and elapsed time, and nothing a player does feeds back into what spawns. That
+        <em>same seeded course</em>, exactly: the wave sequence is a pure function of the world RNG
+        and elapsed time, and nothing a player does feeds back into what spawns. That
         property is asserted in the test suite by driving one engine across every lane and diffing its
         spawn stream against a passive one frame by frame, and it is what lets one run per
         (player, course) yield every pairwise result.
@@ -290,7 +290,7 @@ export default function Writeup() {
       <P>
         Three things had to be swept rather than picked, because each alone can decide the answer: how
         competent the field is, whether a crashed run still scores (a head-to-head pot you must bank to
-        register, versus a leaderboard), and how double-forfeit ties settle — on this difficulty most
+        register, versus a leaderboard), and how double-forfeit ties settle. On this difficulty most
         matches end with neither player banking, so that last one is not a billing detail.
       </P>
       <Table
@@ -305,11 +305,12 @@ export default function Writeup() {
         hot={(r) => r === 3 || r === 4}
       />
       <P dim>
-        The number to quote in each column is not the biggest one — it is the strongest opposition for
-        that rule. Banking early is only correct when a forfeit scores nothing; under a leaderboard
-        rule the right play is to never bank and grind, which is what the grinder field does. The
-        eye-catching 71.0% is the attacker beating a field using the wrong strategy for the rule it is
-        scored under, so quoting it would be measuring our own modeling error.
+        The number to quote in each column is the one against the strongest opposition for that
+        rule, not the biggest one. Banking early is only correct when a forfeit scores nothing;
+        under a leaderboard rule the right play is to never bank and grind, which is what the
+        grinder field does. The eye-catching 71.0% is the attacker beating a field using the wrong
+        strategy for the rule it is scored under, so quoting it would be measuring our own modeling
+        error.
       </P>
       <P>
         Counting a policy as hidden if it stays under 3σ <em>and</em> the client-side detector never
@@ -336,8 +337,8 @@ export default function Writeup() {
       <P>
         <strong>The scoring rule sets how detectable a winner can be.</strong> Requiring a cash-out to
         register means two-thirds of matches tie at zero, which compresses the population&apos;s
-        win-rate spread to 2.8–3.2&nbsp;pp — so any consistent winner is instantly loud. Letting
-        crashed runs score widens the spread to 8.9–10.3&nbsp;pp, and a 71% bot reads as merely 2.1σ.
+        win-rate spread to 2.8-3.2&nbsp;pp, so any consistent winner is instantly loud. Letting
+        crashed runs score widens the spread to 8.9-10.3&nbsp;pp, and a 71% bot reads as merely 2.1σ.
         Same detector, same attacker: the scoring rule alone moves it from unmissable to unremarkable.
         If win-rate z-score is the primary ranking signal, the scoring rule decides how much power it
         has.
@@ -345,10 +346,10 @@ export default function Writeup() {
       <P>
         <strong>The attacker&apos;s profit is the field&apos;s mistakes, not a defeated detector.</strong>{" "}
         Every profitable-and-hidden row above is against a field that plays badly or plays the wrong
-        strategy for its rule. The modeled fields&apos; own best-performing greed level is bank@30–50
-        where the attacker&apos;s optimum is bank@12–30; that gap <em>is</em> the edge. Anything that
-        teaches players to bank better narrows the exploitable margin — an unusual anti-cheat lever,
-        and cheaper than a detector.
+        strategy for its rule. The modeled fields&apos; own best-performing greed level is bank@30-50
+        where the attacker&apos;s optimum is bank@12-30; that gap <em>is</em> the edge. Anything that
+        teaches players to bank better narrows the exploitable margin, an unusual anti-cheat lever
+        and a cheaper one than a detector.
       </P>
       <P>
         So the claim survives, conditionally, and the conditions are worth more than the claim: there
@@ -368,7 +369,7 @@ export default function Writeup() {
       <P>
         Every threshold is a prior until fitted to data. The pipeline (<span className="mono">pnpm calibrate</span>)
         loads a real human swipe corpus as the negative class, runs each attacker as the positive
-        class, computes an ROC/AUC per feature, and picks each threshold at FPR ≤ 0.1% — because a
+        class, computes an ROC/AUC per feature, and picks each threshold at FPR ≤ 0.1%, because a
         false ban costs a real player. Its AUC matrix is built to expose, not hide, that the evasive
         and stealth attackers are not separable from humans on any swipe-level feature. The pipeline is
         built and unit-tested; no human corpus has been recorded yet, so the shipped thresholds remain
@@ -377,26 +378,26 @@ export default function Writeup() {
 
       <H n="06">What production needs that this cannot have</H>
       <ul style={{ ...serif, fontSize: 16, lineHeight: 1.7, color: "var(--ink)", maxWidth: "68ch", paddingLeft: 22, marginBottom: 16 }}>
-        <li>Native touch-stack data — pressure, touch-major/minor, true hardware timestamps.</li>
+        <li>Native touch-stack data: pressure, touch-major/minor, true hardware timestamps.</li>
         <li>Device attestation (Play Integrity / App Attest) to make OS-level injection expensive.</li>
-        <li>Cross-account behavioral fingerprinting — a farm&apos;s accounts share swipe-shape structure.</li>
-        <li>Payout-graph / collusion analysis — repeat-pairing far above matchmaking expectation.</li>
-        <li>Server-authoritative game state — validate submitted runs against the deterministic engine.</li>
+        <li>Cross-account behavioral fingerprinting: a farm&apos;s accounts share swipe-shape structure.</li>
+        <li>Payout-graph / collusion analysis: repeat-pairing far above matchmaking expectation.</li>
+        <li>Server-authoritative game state: validate submitted runs against the deterministic engine.</li>
       </ul>
 
       <H n="07">Limitations</H>
       <P>
         No human corpus yet, so the ROC/AUC and FPR-calibrated cuts are unpopulated. The detector is
         demonstrated client-side (the design is server-side). The population and cadence models are
-        simulations parameterized by plausible priors, not fitted to Triumph&apos;s real distribution —
-        they argue a structural point robust to the parameters, but the specific percentiles would move
-        on real data. The stealth attacker is a model, not a captured real-world bot; a real one would
-        face device attestation this bench does not simulate. Collusion and farm fingerprinting are
-        described, not built.
+        simulations parameterized by plausible priors, not fitted to Triumph&apos;s real distribution.
+        They argue a structural point that holds across those parameters, but the specific percentiles
+        would move on real data. The stealth attacker is a model, not a captured real-world bot; a
+        real one would face device attestation this bench does not simulate. Collusion and farm
+        fingerprinting are described, not built.
       </P>
       <P>
         Two more worth stating plainly. <strong>&ldquo;Never actioned&rdquo; is not &ldquo;never
-        noticed&rdquo;</strong> — the stealth attacker trips the SUSPECT review tier on 2 of 12 seeds,
+        noticed&rdquo;</strong>: the stealth attacker trips the SUSPECT review tier on 2 of 12 seeds,
         so a defender who staffs a review queue rather than only auto-banning at the BOT tier recovers
         some signal from exactly those seeds. That is a narrow but real foothold, and it is reported
         here rather than rounded away. And every attacker number on this page is measured over 180 or
