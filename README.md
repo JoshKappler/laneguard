@@ -9,10 +9,11 @@ not the motor forensics, are what actually bind a bot.
 **Live: [laneguard.joshuakappler.com](https://laneguard.joshuakappler.com)** ·
 [read the analysis →](./REPORT.md) · live writeup at `/writeup`
 
-> **Scope.** The game is an original simulation built from public App Store
-> screenshots (`references/`). Nothing here reverse-engineers, inspects, or runs
-> against Triumph's real app or servers, and nothing is usable as a cheat against
-> it. Every number in the UI and docs comes from code that ran; nothing is
+> **Scope.** The game is an original simulation, built by eye from screenshots
+> of the shipped game taken on my own phone plus Triumph's public marketing and
+> App Store images (all catalogued in `references/MANIFEST.md`). Nothing here
+> reverse-engineers, decompiles, inspects, or runs against Triumph's real app or
+> servers, and nothing is usable as a cheat against it. Every number in the UI and docs comes from code that ran; nothing is
 > invented, and first-principles priors are labeled as priors.
 
 The bench is three pages. **Setup**: one run panel, driver and anti-cheat side

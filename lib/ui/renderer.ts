@@ -1,30 +1,42 @@
 /*
- * Canvas renderer for the game — a pure function of Engine state + a small
+ * Canvas renderer for the game, a pure function of Engine state plus a small
  * view-effects bag (particles, tilt). Rendering never touches physics.
  *
- * Projection matches the reference screenshots: a GTA-style chase camera above
- * and behind the car, horizon just past the top edge, so the road runs far
- * ahead. Cars and barriers are projected 3D boxes, not flat sprites.
+ * Projection is fitted to references/triumph-drive-gameplay-hires.png. Road
+ * lines there converge on a vanishing point 0.170 frame-heights above the top
+ * edge, and a line one lane off the camera axis climbs 0.1109 px sideways per
+ * px down. Those two numbers set YH, AMP and LANE_W below.
  */
 import type { Engine, Car, Barrier } from "@/lib/sim/engine";
 import { hitboxShrink } from "@/lib/sim/collision";
 
 const FONT = "'Luckiest Guy', 'IBM Plex Sans', 'Arial Black', sans-serif";
 
-// projection: proj(z) = D0/(D0+z); screenY = YH + (AMP - h*PXPM) * proj.
-// Constants measured off the reference gameplay screenshot: road width at the
-// frame top is ~0.44 of the bottom, so the vanishing point sits most of a
-// screen-height above the frame.
-const YH = -676; // horizon screen y — far above the frame
-const AMP = 1330; // player row sits at YH + AMP
-const D0 = 74.7; // camera distance to the player, z units
-const LANE_W = 88; // px per lane at the player row
-const PXPM = LANE_W / 3.5; // px per meter of height at the player row
+// proj(z) = D0/(D0+z); screenY = YH + (AMP - h*PXPM) * proj.
+const YH = -146; // horizon screen y, above the frame
+const AMP = 818; // player row sits at YH + AMP
+// D0 puts the spawn horizon (z=55) just under the top edge. Sim z units are
+// coarser than the reference game's, so render lengths below are set from the
+// reference's on-screen proportions rather than from sim metres.
+const D0 = 16.2;
+const LANE_W = 90.7; // px per lane at the player row
+const PXPM = LANE_W / 3.5;
 const Z_FAR = 400;
 
-const CAR_HALF_W = 0.3; // lane units
-const CAR_HALF_L = 3.0; // z units — also the barrier block half-length
-const CAR_H = 1.0; // meters
+const CAR_HALF_W = 0.34; // lane units; reference car fills ~0.68 of a lane
+const CAR_HALF_L = 1.28; // z units, also the barrier block half-length
+const CAR_H = 0.55; // metres
+
+const ROAD_L = -0.5, ROAD_R = 3.5; // outer travel-lane boundaries
+// The reference road is six lanes of asphalt wide: four marked lanes plus a
+// wide paved shoulder each side, then a guardrail.
+const SHOULDER = 1.0;
+const PAVE_L = ROAD_L - SHOULDER, PAVE_R = ROAD_R + SHOULDER;
+const RAIL_W = 0.46; // guardrail width, lane units
+const DASH_PERIOD = 3.07, DASH_LEN = 1.38;
+
+const ASPHALT = "#736d6c";
+const GROUND = "#bdaf83";
 
 export interface Particle {
   x: number; y: number; vx: number; vy: number;
@@ -143,9 +155,9 @@ export class Renderer {
     }
 
     this.drawGround();
+    this.drawRainbow();
     this.drawRoad();
     this.drawCashoutText();
-    this.drawRainbow();
 
     // far-to-near painter's order over cars, barrier blocks, and the player
     const items: { z: number; kind: "car" | "bar" | "me"; o?: Car | Barrier }[] = [];
@@ -207,27 +219,59 @@ export class Renderer {
     g.fill();
   }
 
+  // Tan desert in low-contrast rectangular cells, matching the reference's
+  // blocky ground. Cells are keyed to world position so they scroll with dist.
   private drawGround() {
     const g = this.ctx;
-    g.fillStyle = "#c9bc9e";
+    g.fillStyle = GROUND;
     g.fillRect(0, 0, this.W, this.H);
-    const period = 6;
-    const off = this.e.state.dist % period;
-    for (let zi = -1; zi < 16; zi++) {
-      const z = zi * period - off;
-      const zRow = Math.floor((z + this.e.state.dist) / period + 0.5);
-      const r = seedRand(zRow * 7919);
-      const p = this.proj(Math.max(0.1, z));
-      const y1 = this.sy(Math.max(-6, z)),
-        y2 = this.sy(z + period);
-      for (let k = 0; k < 3; k++) {
-        const left = r() < 0.5;
-        const latOff = 0.4 + r() * 2.6;
-        const gw = (0.25 + r() * 0.6) * LANE_W * p;
-        const gx = left ? this.sx(-0.8 - latOff, p) - gw : this.sx(3.8 + latOff, p);
-        g.fillStyle = r() < 0.5 ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)";
-        g.fillRect(gx, Math.min(y1, y2), gw, Math.abs(y1 - y2) * (0.4 + r() * 0.6));
+    const cellZ = 5,
+      cellLat = 1.1;
+    const off = this.e.state.dist % cellZ;
+    for (let zi = -1; zi < 34; zi++) {
+      const z = zi * cellZ - off;
+      if (this.proj(z) < 0.03) break;
+      const row = Math.round((z + this.e.state.dist) / cellZ);
+      const r = seedRand(row * 7919);
+      for (let k = 0; k < 18; k++) {
+        const side = k < 9 ? -1 : 1;
+        const idx = k % 9;
+        const latA = side < 0 ? PAVE_L - RAIL_W - (idx + 1) * cellLat : PAVE_R + RAIL_W + idx * cellLat;
+        const t = r();
+        if (t < 0.42) continue;
+        const tint = t < 0.71 ? "rgba(0,0,0,0.075)" : "rgba(255,255,255,0.095)";
+        this.quad(latA, latA + cellLat, z, z + cellZ * (0.55 + r() * 0.45), tint);
       }
+    }
+  }
+
+  // A straight wall is planar, so one quad per face projects correctly.
+  private wall(latIn: number, latOut: number, z0: number, z1: number, hM: number) {
+    const poly = (pts: Pt[], fill: string) => {
+      const g = this.ctx;
+      g.fillStyle = fill;
+      g.beginPath();
+      g.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+      g.closePath();
+      g.fill();
+    };
+    const iA = this.pt(latIn, z0, 0), iB = this.pt(latIn, z1, 0);
+    const tA = this.pt(latIn, z0, hM), tB = this.pt(latIn, z1, hM);
+    const oA = this.pt(latOut, z0, hM), oB = this.pt(latOut, z1, hM);
+    const gA = this.pt(latOut, z0, 0), gB = this.pt(latOut, z1, 0);
+    poly([gA, gB, oB, oA], "#9a9691");
+    poly([tA, tB, oB, oA], "#a8a5a0");
+    poly([iA, iB, tB, tA], "#7a7065");
+    const seamZ = 0.72;
+    const off = this.e.state.dist % seamZ;
+    for (let k = 0; k < 260; k++) {
+      const z = k * seamZ - off + z0;
+      if (z > z1) break;
+      if (this.proj(z) < 0.06) break;
+      const a = this.pt(latIn, z, 0), b = this.pt(latIn, z + 0.11, 0);
+      const c = this.pt(latIn, z + 0.11, hM), d = this.pt(latIn, z, hM);
+      poly([a, b, c, d], "#4a4239");
     }
   }
 
@@ -247,46 +291,49 @@ export class Renderer {
 
   private drawRoad() {
     const Z0 = -12;
-    this.quad(-0.68, -0.5, Z0, Z_FAR, "#4a463f");
-    this.quad(3.5, 3.68, Z0, Z_FAR, "#54524e");
-    this.quad(-0.5, 3.5, Z0, Z_FAR, "#6d6f73");
-    this.quad(-0.5, -0.44, Z0, Z_FAR, "#e8e8e8");
-    this.quad(3.44, 3.5, Z0, Z_FAR, "#e8e8e8");
-    this.quad(2.47, 2.53, Z0, Z_FAR, "#2ed94f");
-    const dashLen = 2.6,
-      gap = 4.6,
-      period = dashLen + gap;
-    const off = this.e.state.dist % period;
+    this.quad(PAVE_L, ROAD_L, Z0, Z_FAR, "#6b6564");
+    this.quad(ROAD_R, PAVE_R, Z0, Z_FAR, "#6b6564");
+    this.quad(ROAD_L, ROAD_R, Z0, Z_FAR, ASPHALT);
+    this.quad(ROAD_L, ROAD_L + 0.055, Z0, Z_FAR, "#f2f2f2");
+    this.quad(ROAD_R - 0.055, ROAD_R, Z0, Z_FAR, "#f2f2f2");
+    this.quad(2.47, 2.55, Z0, Z_FAR, "#0edb0c");
+    const off = this.e.state.dist % DASH_PERIOD;
     for (const b of [0.5, 1.5]) {
-      for (let zi = -3; zi < 26; zi++) {
-        const z = zi * period - off;
-        const za = Math.max(-12, z),
-          zb = z + dashLen;
-        if (zb < -12 || this.proj(za) < 0.05) continue;
-        this.quad(b - 0.026, b + 0.026, za, zb, "#f2f2f2");
+      for (let zi = -3; zi < 72; zi++) {
+        const z = zi * DASH_PERIOD - off;
+        const za = Math.max(Z0, z),
+          zb = z + DASH_LEN;
+        if (zb < Z0) continue;
+        if (this.proj(za) < 0.045) break;
+        this.quad(b - 0.022, b + 0.022, za, zb, "#f2f2f2");
       }
     }
+    this.wall(PAVE_L, PAVE_L - RAIL_W, Z0, Z_FAR, 1.15);
+    this.wall(PAVE_R, PAVE_R + RAIL_W, Z0, Z_FAR, 1.15);
   }
 
+  // Letters read far-to-near, the way the painted lane reads in the reference.
   private drawCashoutText() {
     const g = this.ctx;
-    const period = 42;
+    const period = 26;
     const off = this.e.state.dist % period;
-    g.fillStyle = "#27e04c";
-    for (let zi = 0; zi < 3; zi++) {
-      const z = zi * period - off + 14;
-      if (z < 1 || z > 62) continue;
+    g.fillStyle = "#0edb0c";
+    for (let zi = 0; zi < 6; zi++) {
+      const z = zi * period - off + 4;
+      if (z < -2 || this.proj(z) < 0.2) continue;
       const p = this.proj(z);
-      const a = this.pt(this.e.cashLane, z),
-        b = this.pt(this.e.cashLane, z + 2);
-      const ang = Math.atan2(b.y - a.y, b.x - a.x);
+      const near = this.pt(this.e.cashLane, z),
+        far = this.pt(this.e.cashLane, z + 9);
+      const ang = Math.atan2(near.y - far.y, near.x - far.x);
       g.save();
-      g.translate(a.x, a.y);
+      g.translate(far.x, far.y);
       g.rotate(ang);
-      g.font = 64 * p + "px " + FONT;
-      g.textAlign = "center";
-      g.globalAlpha = 0.92;
-      g.fillText("CASHOUT", -120 * p, 22 * p);
+      g.font = 72 * p + "px " + FONT;
+      g.textAlign = "left";
+      g.textBaseline = "middle";
+      g.globalAlpha = 0.95;
+      g.fillText("CASHOUT", 0, 0);
+      g.textBaseline = "alphabetic";
       g.restore();
     }
     g.globalAlpha = 1;
@@ -309,14 +356,14 @@ export class Renderer {
     const pa = this.proj(zBot),
       pb = this.proj(zTop);
     g.save();
-    g.filter = "blur(6px)";
-    g.globalAlpha = 0.58;
+    g.filter = "blur(7px)";
+    g.globalAlpha = 0.72;
     g.fillStyle = grad;
     g.beginPath();
-    g.moveTo(this.sx(-0.58, pa), yBot);
-    g.lineTo(this.sx(-0.58, pb), yTop);
-    g.lineTo(this.sx(0.02, pb), yTop);
-    g.lineTo(this.sx(0.02, pa), yBot);
+    g.moveTo(this.sx(-7.5, pa), yBot);
+    g.lineTo(this.sx(-7.5, pb), yTop);
+    g.lineTo(this.sx(-3.2, pb), yTop);
+    g.lineTo(this.sx(-3.2, pa), yBot);
     g.closePath();
     g.fill();
     g.restore();
@@ -355,15 +402,7 @@ export class Renderer {
       g.fill();
     };
 
-    // shadow
     const pc = this.pt(latC, zC);
-    const p = this.proj(zC);
-    const ry = Math.max(2, (this.sy(zC - halfLz) - this.sy(zC + halfLz)) / 2);
-    g.fillStyle = "rgba(0,0,0,0.22)";
-    g.beginPath();
-    g.ellipse(pc.x + 2 * p, pc.y, halfWlat * LANE_W * p * 1.3, ry, 0, 0, Math.PI * 2);
-    g.fill();
-
     const seeRight = pc.x < this.W / 2;
     if (seeRight) face([G[3], G[0], T[0], T[3]], shade(col.dark, 0.82));
     else face([G[1], G[2], T[2], T[1]], shade(col.dark, 0.82));
@@ -382,6 +421,7 @@ export class Renderer {
   private carDetail(T: Pt[], col: { body: string; dark: string }, plate: boolean, zC: number) {
     const g = this.ctx;
     const p = this.proj(zC);
+    if (p < 0.34) return;
     const quadOf = (u0: number, u1: number, v0: number, v1: number, fill: string) => {
       const a = this.topPt(T, u0, v0),
         b = this.topPt(T, u1, v0),
@@ -396,11 +436,22 @@ export class Renderer {
       g.closePath();
       g.fill();
     };
-    quadOf(0.14, 0.86, 0.56, 0.78, "#20242c"); // windshield
-    quadOf(0.18, 0.82, 0.1, 0.24, "#20242c"); // rear window
-    quadOf(0.1, 0.9, 0.3, 0.5, shade(col.body, 0.93)); // roof band
-    quadOf(0.16, 0.3, 0.86, 0.96, "#f6f3d8"); // headlights
-    quadOf(0.7, 0.84, 0.86, 0.96, "#f6f3d8");
+    // u across the width, v along the length with v=0 at the rear bumper
+    const glass = "#1d2128";
+    quadOf(-0.015, 0.075, 0.03, 0.16, "#15171a"); // tyres
+    quadOf(0.925, 1.015, 0.03, 0.16, "#15171a");
+    quadOf(-0.015, 0.075, 0.81, 0.94, "#15171a");
+    quadOf(0.925, 1.015, 0.81, 0.94, "#15171a");
+    quadOf(-0.06, 0.0, 0.68, 0.73, "#cfd6dd"); // wing mirrors
+    quadOf(1.0, 1.06, 0.68, 0.73, "#cfd6dd");
+    quadOf(0.06, 0.16, 0.28, 0.68, glass); // side windows
+    quadOf(0.84, 0.94, 0.28, 0.68, glass);
+    quadOf(0.13, 0.87, 0.09, 0.24, glass); // rear window
+    quadOf(0.48, 0.52, 0.09, 0.24, col.body); // its centre pillar
+    quadOf(0.15, 0.85, 0.66, 0.75, glass); // windshield
+    quadOf(0.16, 0.84, 0.27, 0.66, shade(col.body, 1.16)); // roof panel
+    quadOf(0.3, 0.45, 0.77, 0.8, glass); // hood vents
+    quadOf(0.55, 0.7, 0.77, 0.8, glass);
     // rear-face details: taillights at the bottom corners, plate centered
     const rearAt = (u: number, hFrac: number) => {
       const top = this.topPt(T, u, 0);
@@ -437,9 +488,14 @@ export class Renderer {
   }
 
   private drawTraffic(c: Car) {
+    const g = this.ctx;
     const col = CAR_COLORS[c.col || 0];
+    const fade = Math.min(1, Math.max(0, (this.e.cfg.spawnZ - c.z) / 6));
+    g.save();
+    g.globalAlpha = fade;
     const T = this.box(c.lane, c.z, 0, CAR_HALF_W, CAR_HALF_L, CAR_H, col);
     this.carDetail(T, col, false, c.z);
+    g.restore();
   }
 
   private drawPlayer() {
@@ -454,21 +510,7 @@ export class Renderer {
     const zMid = (b.z0 + b.z1) / 2;
     const halfL = (b.z1 - b.z0) / 2;
     if (halfL <= 0) return;
-    const T = this.box(lat, zMid, 0, 0.21, halfL, 0.8, { body: "#d84840", dark: "#c0201a" });
-    // white band across the top face
-    const g = this.ctx;
-    const a = this.topPt(T, 0, 0.4),
-      b2 = this.topPt(T, 1, 0.4),
-      c = this.topPt(T, 1, 0.6),
-      d = this.topPt(T, 0, 0.6);
-    g.fillStyle = "rgba(255,255,255,0.85)";
-    g.beginPath();
-    g.moveTo(a.x, a.y);
-    g.lineTo(b2.x, b2.y);
-    g.lineTo(c.x, c.y);
-    g.lineTo(d.x, d.y);
-    g.closePath();
-    g.fill();
+    this.box(lat, zMid, 0, 0.14, halfL, 0.78, { body: "#d43a30", dark: "#a81c14" });
   }
 
   private drawHitboxes() {

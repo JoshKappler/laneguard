@@ -82,8 +82,9 @@ export default function Writeup() {
         are what actually bind a bot.
       </P>
       <Note>
-        <strong>Scope and honesty.</strong> The game here is an <em>original simulation</em> built
-        from public App Store screenshots of the &ldquo;Drive&rdquo; game in the Triumph Arcade app.
+        <strong>Scope and honesty.</strong> The game here is an <em>original simulation</em>, built by
+        eye from screenshots of the shipped &ldquo;Drive&rdquo; game taken on my own phone plus
+        Triumph&apos;s public marketing and App Store images.
         Nothing in this project reverse-engineers, decompiles, inspects, or runs against Triumph&apos;s
         real app or servers, and nothing here is usable as a cheat against it. Every number below is
         produced by code in this repo that actually ran (<span className="mono">pnpm batch</span>).
@@ -130,7 +131,7 @@ export default function Writeup() {
                 <div>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={`/compare/${pair.ours}`} alt={`LaneGuard ${pair.label} render`} style={{ width: "100%", borderRadius: 6, border: "1px solid var(--line)", display: "block" }} />
-                  <div className="mono tiny" style={{ marginTop: 4, textAlign: "center", color: "var(--accent)" }}>ours</div>
+                  <div className="mono tiny" style={{ marginTop: 4, textAlign: "center", color: "var(--accent)" }}>mine</div>
                 </div>
               </div>
               <div className="mono tiny muted" style={{ marginTop: 6, textAlign: "center" }}>{pair.label}</div>
@@ -138,7 +139,7 @@ export default function Writeup() {
           ))}
         </div>
         <figcaption style={{ ...serif, fontSize: 14, color: "var(--ink-2)", marginTop: 14, maxWidth: "70ch" }}>
-          The simulation is built from public App Store screenshots (left of each pair), matched by
+          The simulation is built from the screenshots on the left of each pair, matched by
           deliberate observation: the blurred rainbow shoulder, the rotated green CASHOUT lettering,
           cartoon cars with a consistent light source, and the HUD. It models the visual and physical
           feel that makes the behavioral signals meaningful. It is not a clone of the product and had

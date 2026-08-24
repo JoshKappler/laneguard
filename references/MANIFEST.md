@@ -47,6 +47,16 @@ this research pass.
   wreck). "TAP TO CONTINUE" appears at the bottom. Rainbow-gradient lane visible at
   bottom-left; a green diagonal guardrail line is visible at top-right.
 
+### triumph-drive-gameplay-hires.png / triumph-drive-crash-hires.png
+- **Source:** local files, `IMG_1195.PNG` / `IMG_1196.PNG` (not web URLs)
+- **Retrieved:** 2026-08-24 (copied into repo)
+- **Shows:** A second pair of the user's own captures, same game, cleaner frames.
+  The gameplay one is what the renderer's projection is fitted to: road lines in it
+  converge on a point 0.170 frame-heights above the top edge, and a line one lane off
+  the camera axis moves sideways 0.1097 px per px down the frame. The crash one shows
+  the wreck, smoke plume, and "TAP TO CONTINUE" screen at higher fidelity than
+  `triumph-drive-crash.png`.
+
 ---
 
 ## 2. App Store listing (source: https://apps.apple.com/us/app/triumph-arcade/id1608987929)
@@ -229,6 +239,8 @@ though it's absent from the thumbnail — not verified by us):
 | triumph-drive-start.png | user's own device (local) |
 | triumph-drive-gameplay.png | user's own device (local) |
 | triumph-drive-crash.png | user's own device (local) |
+| triumph-drive-gameplay-hires.png | user's own device (local) |
+| triumph-drive-crash-hires.png | user's own device (local) |
 | appstore-01.jpg through appstore-06.jpg, appstore-08.jpg | apps.apple.com listing |
 | appstore-preview-video-poster.jpg | apps.apple.com listing (app-preview video poster) |
 | triumphlabs-drive-title-art.jpg | triumphlabs.com |
