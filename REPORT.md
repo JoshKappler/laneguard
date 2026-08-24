@@ -162,8 +162,9 @@ the signal separates humans from a given attacker class at all.
 6. **Behavior texture** — session habits automation skips: aborted gestures,
    entering contested space and *paying* for it, actually banking runs. Catches
    T2+; **mostly defeated by T3**, which manufactures all three — this is the
-   one signal that still lands on T3 at all, flagging on 2 of 12 seeds when its
-   contested-space rate happens to fall short of the detector's window.
+   one signal that still lands on T3 at all, flagging on 2 of 40 seeds in a
+   wider sweep when its contested-space rate happens to fall short of the
+   detector's window.
 7. **Event integrity** — synthetic-event provenance (`isTrusted`), coordinate
    granularity. Cheap to spoof at the OS level, so corroborating only — it goes
    to zero the moment hardware injection is simulated.

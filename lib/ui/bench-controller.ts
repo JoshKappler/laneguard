@@ -157,6 +157,25 @@ export class BenchController {
     this.raf = 0;
   }
 
+  /** advance the sim headlessly at a fixed 60 Hz step (no rendering), sampling
+      confidence at the same ~7 Hz cadence the live loop uses */
+  fastForward(ms: number) {
+    if (this.cfg.mode === "human") return;
+    const step = 1000 / 60;
+    let sinceSample = 0;
+    for (let t = 0; t < ms && !this.finished; t += step) {
+      this.route(this.engine.step(step));
+      this.detector.tickRisks(this.engine.now);
+      this.route(this.bot.tick(this.engine.now));
+      sinceSample += step;
+      if (sinceSample >= 140) {
+        sinceSample = 0;
+        this.emit();
+      }
+    }
+    this.emit(true);
+  }
+
   /** live-swappable settings that don't require a full reset */
   setLive(p: { mode?: PlayMode; hwInject?: boolean; showHitbox?: boolean }) {
     if (p.showHitbox !== undefined) this.fx.showHitbox = p.showHitbox;

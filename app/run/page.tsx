@@ -56,6 +56,11 @@ export default function RunPage() {
                   show hitboxes
                 </label>
                 <button onClick={resetTelemetry}>reset telemetry</button>
+                {config.mode !== "human" && controller && !snapshot?.done && (
+                  <button onClick={() => controller.fastForward(180_000)} title="advance the sim 3 minutes instantly">
+                    fast-forward 3 min
+                  </button>
+                )}
                 <Link
                   href="/results"
                   className="mono"

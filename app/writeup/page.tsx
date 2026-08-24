@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { NavBar } from "@/components/NavBar";
 
 export const metadata: Metadata = {
   title: "LaneGuard analysis",
@@ -68,9 +68,10 @@ function Table({ head, rows, hot }: { head: string[]; rows: (string | number)[][
 
 export default function Writeup() {
   return (
-    <main style={{ maxWidth: 860, margin: "0 auto", padding: "40px 24px 96px" }}>
-      <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-        <Link href="/" className="mono" style={{ fontSize: 12 }}>← bench</Link>
+    <main style={{ maxWidth: 1500, margin: "0 auto", padding: "0 16px 16px" }}>
+      <NavBar page="writeup" />
+      <article style={{ maxWidth: 860, margin: "0 auto", padding: "24px 8px 96px" }}>
+      <div className="row" style={{ justifyContent: "flex-end", marginBottom: 8 }}>
         <span className="eyebrow">Analysis</span>
       </div>
       <h1 style={{ fontSize: 40, letterSpacing: "-0.03em", lineHeight: 1.05, margin: "8px 0 12px" }}>
@@ -398,17 +399,15 @@ export default function Writeup() {
       </P>
       <P>
         Two more worth stating plainly. <strong>&ldquo;Never actioned&rdquo; is not &ldquo;never
-        noticed&rdquo;</strong>: the stealth attacker trips the SUSPECT review tier on 2 of 12 seeds,
-        so a defender who staffs a review queue rather than only auto-banning at the BOT tier recovers
-        some signal from exactly those seeds. That is a narrow but real foothold, and it is reported
+        noticed&rdquo;</strong>: the stealth attacker still transiently trips the SUSPECT review tier
+        (2 of 40 seeds in a wider sweep), so a defender who staffs a review queue rather than only
+        auto-banning at the BOT tier recovers some signal from exactly those sessions. That is a narrow but real foothold, and it is reported
         here rather than rounded away. And every attacker number on this page is measured over 180 or
         600&nbsp;s of a <em>single account</em>; nothing here models an adversary who tunes against the
         detector over weeks, which is the realistic one.
       </P>
 
-      <div style={{ marginTop: 48, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
-        <Link href="/" className="mono" style={{ fontSize: 12 }}>← back to the bench</Link>
-      </div>
+      </article>
     </main>
   );
 }

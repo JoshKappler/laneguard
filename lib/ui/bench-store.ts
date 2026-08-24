@@ -6,6 +6,7 @@
  */
 import {
   DEFAULT_CONFIG,
+  PRESETS,
   decodeConfig,
   encodeConfig,
   mergeConfig,
@@ -18,6 +19,11 @@ import { BenchController, type BenchSnapshot } from "./bench-controller";
 const CONFIG_KEY = "laneguard.config.v2";
 const CORPUS_KEY = "laneguard.corpus.v1";
 
+/* First visit (no saved config, no ?c= permalink): boot the naive scripted
+   bot and pre-run 3 sim-minutes so every panel arrives populated. */
+const DEMO_PRESET_ID = "naive-scripted";
+const DEMO_FF_MS = 180_000;
+
 type Listener = () => void;
 
 class BenchStore {
@@ -26,6 +32,7 @@ class BenchStore {
   snapshot: BenchSnapshot | null = null;
   corpus: TracePoint[][] = [];
   private listeners = new Set<Listener>();
+  private demoBoot = false;
 
   ensure() {
     if (this.controller || typeof window === "undefined") return;
@@ -38,6 +45,14 @@ class BenchStore {
       },
       recordedCorpus: () => (this.config.bot.mirror.useRecorded ? this.corpus : []),
     });
+    if (this.demoBoot) {
+      const p = PRESETS.find((x) => x.id === DEMO_PRESET_ID);
+      if (p) this.controller.annotate(p.logLine);
+      this.controller.annotate(
+        "DEMO: pre-ran 3 minutes of the naive scripted bot so every panel arrives populated. Pick any preset on setup to run your own session."
+      );
+      this.controller.fastForward(DEMO_FF_MS);
+    }
     this.controller.start();
   }
 
@@ -51,7 +66,9 @@ class BenchStore {
     } catch {
       /* ignore */
     }
-    return DEFAULT_CONFIG;
+    this.demoBoot = true;
+    const demo = PRESETS.find((p) => p.id === DEMO_PRESET_ID);
+    return demo ? mergeConfig(DEFAULT_CONFIG, demo.config) : DEFAULT_CONFIG;
   }
 
   private readCorpus(): TracePoint[][] {

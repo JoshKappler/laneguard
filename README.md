@@ -16,17 +16,19 @@ not the motor forensics, are what actually bind a bot.
 > servers, and nothing is usable as a cheat against it. Every number in the UI and docs comes from code that ran; nothing is
 > invented, and first-principles priors are labeled as priors.
 
-The bench is three pages. **Setup**: one run panel, driver and anti-cheat side
-by side, plus a phone that records your real swipes and mutates them into the
-replay-farm corpus.
+The bench is four tabs on one nav: setup, run, results, writeup. A first visit
+boots a pre-run demo (the naive scripted bot, fast-forwarded 3 sim-minutes) so
+every panel arrives populated, then keeps running live. **Setup**: one run
+panel, driver and anti-cheat side by side, plus a phone that records your real
+swipes and mutates them into the replay-farm corpus.
 
 ![Setup page](docs/shots/setup.png)
 
 **Run**: the game beside a ghost phone that traces each swipe in red at the
 speed it actually happened, one-line signal bars, detector confidence over the
 whole session against the SUSPECT/BOT cuts, and every completed run as a cell.
-Here the naive scripted bot is caught: three smoking-gun flags, BOT at 75%
-confidence.
+Here the naive scripted bot is caught three minutes in: five red flags, BOT at
+75% confidence, and the enforcement line reading "would be actioned".
 
 ![Run page: the naive scripted bot called BOT](docs/shots/run-naive-bot.png)
 
