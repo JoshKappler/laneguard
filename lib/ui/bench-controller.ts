@@ -190,7 +190,6 @@ export class BenchController {
     this.seq = 0;
     this.fx.particles = [];
     this.fx.tilt = 0;
-    this.fx.lastGain = null;
     this.build();
     this.pushLog(0, "good", "telemetry reset — detector state and charts cleared");
     this.emit(true);
@@ -281,8 +280,6 @@ export class BenchController {
       switch (ev.kind) {
         case "pass":
           this.detector.recordPass();
-          if ((d.mult as number) > 0)
-            this.fx.lastGain = { mult: d.mult as number, at: this.engine.now, y: 550 };
           break;
         case "death":
           this.detector.recordDeath(ev.t);
