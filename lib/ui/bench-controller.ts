@@ -32,7 +32,13 @@ export interface RunInfo {
   endKind: "crash" | "cashout";
   score: number;
   banked: number;
+  forfeited: number;
   atMs: number;
+}
+
+export interface ConfPoint {
+  t: number;
+  overall: number;
 }
 
 export interface BenchSnapshot {
@@ -88,6 +94,10 @@ export class BenchController {
   swipes: SwipeView[] = [];
   log: LogEntry[] = [];
   runs: RunInfo[] = [];
+  confHistory: ConfPoint[] = [];
+  tierTouches = { suspect: 0, bot: 0 };
+  peakConf = 0;
+  private lastTier = "HUMAN";
   selectedSeq: number | null = null;
   finished = false;
   private swipeCanvas: HTMLCanvasElement | null = null;
@@ -170,6 +180,10 @@ export class BenchController {
     this.swipes = [];
     this.log = [];
     this.runs = [];
+    this.confHistory = [];
+    this.tierTouches = { suspect: 0, bot: 0 };
+    this.peakConf = 0;
+    this.lastTier = "HUMAN";
     this.selectedSeq = null;
     this.finished = false;
     this.swipeAnims = [];
@@ -276,7 +290,13 @@ export class BenchController {
         case "runEnd": {
           const kind = d.endKind as "crash" | "cashout";
           this.detector.recordRunEnd(kind);
-          this.runs.push({ endKind: kind, score: (d.score as number) ?? 0, banked: (d.banked as number) ?? 0, atMs: ev.t });
+          this.runs.push({
+            endKind: kind,
+            score: (d.score as number) ?? 0,
+            banked: (d.banked as number) ?? 0,
+            forfeited: (d.forfeited as number) ?? 0,
+            atMs: ev.t,
+          });
           if (kind === "crash")
             this.pushLog(ev.t, "flag", `RUN END: CRASH at score ${d.score} — $${((d.forfeited as number) ?? 0).toFixed(2)} forfeited`);
           else
@@ -332,6 +352,17 @@ export class BenchController {
   private emit(force = false) {
     const v = this.detector.analyze();
     if (force || true) this.version++;
+    if (v.ready) {
+      this.confHistory.push({ t: this.engine.now, overall: v.overall });
+      // ~7 Hz sampling; halve the series past 2400 points so long sessions stay light
+      if (this.confHistory.length > 2400) this.confHistory = this.confHistory.filter((_, i) => i % 2 === 0);
+      this.peakConf = Math.max(this.peakConf, v.overall);
+      if (v.label !== this.lastTier) {
+        if (v.label === "SUSPECT") this.tierTouches.suspect++;
+        if (v.label === "BOT") this.tierTouches.bot++;
+        this.lastTier = v.label;
+      }
+    }
     const snap: BenchSnapshot = {
       version: this.version,
       clockMs: this.engine.now,

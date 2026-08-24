@@ -5,6 +5,8 @@ import { encodeConfig } from "@/lib/core/config";
 import { useBench } from "@/lib/ui/useBench";
 import { NavBar } from "@/components/NavBar";
 import { SignalRows } from "@/components/SignalRows";
+import { ConfTimeline } from "@/components/ConfTimeline";
+import { RunsPanel } from "@/components/RunsPanel";
 import { DistributionCharts } from "@/components/DistributionCharts";
 import { SwipeInspector } from "@/components/SwipeInspector";
 import { EventLog } from "@/components/EventLog";
@@ -75,6 +77,11 @@ export default function ResultsPage() {
               <SignalRows snap={snapshot} detailWidth={280} />
             </div>
           </section>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(540px, 1fr))", gap: 14 }}>
+            <ConfTimeline controller={controller} version={version} />
+            <RunsPanel controller={controller} />
+          </div>
 
           <DistributionCharts controller={controller} version={version} />
 

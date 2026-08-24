@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useBench } from "@/lib/ui/useBench";
 
 const PAGES = [
-  { href: "/", key: "setup", label: "1 setup" },
-  { href: "/run", key: "run", label: "2 run" },
-  { href: "/results", key: "results", label: "3 results" },
+  { href: "/", key: "setup", label: "setup" },
+  { href: "/run", key: "run", label: "run" },
+  { href: "/results", key: "results", label: "results" },
   { href: "/writeup", key: "writeup", label: "writeup" },
 ];
 

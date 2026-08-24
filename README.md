@@ -6,7 +6,8 @@ attacker ladder against such a game — including an attacker that defeats the
 whole client-side detector — and makes the honest argument that the *economics*,
 not the motor forensics, are what actually bind a bot.
 
-**[Read the analysis →](./REPORT.md)** · live writeup at `/writeup`
+**Live: [laneguard.joshuakappler.com](https://laneguard.joshuakappler.com)** ·
+[read the analysis →](./REPORT.md) · live writeup at `/writeup`
 
 > **Scope.** The game is an original simulation built from public App Store
 > screenshots (`references/`). Nothing here reverse-engineers, inspects, or runs
@@ -14,20 +15,34 @@ not the motor forensics, are what actually bind a bot.
 > it. Every number in the UI and docs comes from code that ran; nothing is
 > invented, and first-principles priors are labeled as priors.
 
-The bench is three pages: **setup** (pick a driver, point the anti-cheat at it,
-record and mutate real swipes for the replay corpus), **run** (the game beside a
-ghost phone that traces every swipe in red at its actual speed), and **results**
-(verdict, distributions, swipe forensics, the economy).
+The bench is three pages. **Setup**: one run panel, driver and anti-cheat side
+by side, plus a phone that records your real swipes and mutates them into the
+replay-farm corpus.
 
-The run view catching the naive scripted bot: four smoking-gun flags, BOT at 75%
+![Setup page](docs/shots/setup.png)
+
+**Run**: the game beside a ghost phone that traces each swipe in red at the
+speed it actually happened, one-line signal bars, detector confidence over the
+whole session against the SUSPECT/BOT cuts, and every completed run as a cell.
+Here the naive scripted bot is caught: four smoking-gun flags, BOT at 75%
 confidence.
 
-![The run view calling the naive scripted bot BOT](docs/shots/bench-naive-bot.png)
+![Run page: the naive scripted bot called BOT](docs/shots/run-naive-bot.png)
 
-The stealth camouflage bot on the same detector: every signal green, HUMAN at low
-confidence. The project is built around reporting this honestly.
+The stealth camouflage bot on the same detector: every signal green, the
+confidence line never near a cut, HUMAN across the whole session. The project
+is built around reporting this honestly.
 
-![The stealth camouflage bot reading HUMAN](docs/shots/bench-stealth-human.png)
+![Run page: the stealth camouflage bot reading HUMAN](docs/shots/run-stealth-human.png)
+
+**Results**: verdict, labeled distributions, per-swipe forensics, the event
+log, calibration state, and the server-side economy and cadence panels.
+
+![Results page](docs/shots/results.png)
+
+**Writeup**: the full analysis, served at `/writeup`.
+
+![Writeup page](docs/shots/writeup.png)
 
 ## Run it
 
@@ -132,8 +147,6 @@ conditional, and the conditions are worth more than the claim:
   to bank well is an anti-cheat lever, and a cheaper one than a detector.
 
 Full tables and method in [REPORT.md](REPORT.md) §5a.
-
-![Calibration priors beside the server-side economy and cadence panels](docs/shots/bench-economy.png)
 
 ## Calibration
 
