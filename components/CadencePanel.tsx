@@ -122,9 +122,9 @@ export function CadencePanel() {
 
   return (
     <section className="panel">
-      <div className="panel-head">
-        <h2>Server-side: session cadence</h2>
-        <span className="sub">7-day simulation · human vs naive farm vs scheduled bot</span>
+      <div className="hline">
+        server-side session cadence{" "}
+        <span className="dim">7-day simulation · human vs naive farm vs scheduled bot</span>
       </div>
       <div className="panel-body">
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>

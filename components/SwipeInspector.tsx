@@ -93,10 +93,10 @@ export function SwipeInspector({ controller, version }: { controller: BenchContr
 
   return (
     <section className="panel">
-      <div className="panel-head">
-        <h2>Live swipe analysis</h2>
-        <span className="mono sub">
-          {selected ? "swipe #" + selected.seq + (selected.replayMatch ? " ⚑ replay" : "") : "waiting for first swipe"}
+      <div className="hline">
+        swipe forensics{" "}
+        <span className="dim">
+          {selected ? "swipe #" + selected.seq + (selected.replayMatch ? " ⚑ replay" : " · unique") : "waiting for first swipe"}
         </span>
       </div>
       <div className="panel-body">

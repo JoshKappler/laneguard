@@ -152,9 +152,9 @@ export function EconPanel() {
 
   return (
     <section className="panel">
-      <div className="panel-head">
-        <h2>Server-side: economy &amp; population</h2>
-        <span className="sub">${entry} head-to-head · {rake}% rake · break-even {(be * 100).toFixed(1)}%</span>
+      <div className="hline">
+        server-side economy + population{" "}
+        <span className="dim">${entry} head-to-head · {rake}% rake · break-even {(be * 100).toFixed(1)}%</span>
       </div>
       <div className="panel-body">
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>

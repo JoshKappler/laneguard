@@ -11,7 +11,7 @@ import {
 } from "@/lib/core/config";
 import { mulberry32, splitSeed } from "@/lib/core/rng";
 import { Engine, type TelemetryEvent } from "@/lib/sim/engine";
-import { Bot } from "@/lib/attack/bot";
+import { Bot, type TracePoint } from "@/lib/attack/bot";
 import { Detector, SIGNAL_NAMES } from "@/lib/detect/detector";
 import type { SwipeFeatures } from "@/lib/detect/features";
 import { Renderer, makeViewFx, type ViewFx } from "./renderer";
@@ -42,6 +42,8 @@ export interface BenchSnapshot {
   verdict: string;
   overall: number;
   ready: boolean;
+  /** true once runsTarget completed runs have finished; the sim is frozen */
+  done: boolean;
   signals: { name: string; sus: number; ready: boolean; detail: string }[];
   flags: string[];
   counters: {
@@ -59,7 +61,15 @@ export interface BenchSnapshot {
 
 type Callbacks = {
   onSnapshot: (s: BenchSnapshot) => void;
+  /** recorded human traces for the replay-farm corpus; [] = use synthesized */
+  recordedCorpus?: () => TracePoint[][];
 };
+
+interface SwipeAnim {
+  pts: TracePoint[];
+  dur: number;
+  t0: number;
+}
 
 export class BenchController {
   cfg: BenchConfig;
@@ -79,6 +89,9 @@ export class BenchController {
   log: LogEntry[] = [];
   runs: RunInfo[] = [];
   selectedSeq: number | null = null;
+  finished = false;
+  private swipeCanvas: HTMLCanvasElement | null = null;
+  private swipeAnims: SwipeAnim[] = [];
   private seq = 0;
   private version = 0;
 
@@ -91,9 +104,10 @@ export class BenchController {
   private build() {
     this.engine = new Engine(this.cfg.game, mulberry32(splitSeed(this.cfg.seed, "world")));
     this.bot = new Bot(this.engine, this.cfg.bot, this.cfg.mode, this.cfg.hwInject, splitSeed(this.cfg.seed, "bot"));
+    const recorded = this.cb.recordedCorpus?.() ?? [];
+    if (recorded.length) this.bot.setCorpus(recorded);
     this.detector = new Detector(this.cfg.detector);
     this.engine.autoRestart = this.cfg.mode !== "human";
-    this.fx.botMode = this.cfg.mode === "human" ? null : this.cfg.mode;
     if (this.cfg.mode !== "human") this.engine.resetRun();
     if (this.renderer) this.renderer = new Renderer(this.renderer.ctx, this.engine, this.fx);
   }
@@ -102,6 +116,19 @@ export class BenchController {
     this.canvas = canvas;
     const ctx = canvas.getContext("2d")!;
     this.renderer = new Renderer(ctx, this.engine, this.fx);
+  }
+
+  detach() {
+    this.canvas = null;
+    this.renderer = null;
+  }
+
+  attachSwipeView(canvas: HTMLCanvasElement) {
+    this.swipeCanvas = canvas;
+  }
+
+  detachSwipeView() {
+    this.swipeCanvas = null;
   }
 
   start() {
@@ -144,6 +171,8 @@ export class BenchController {
     this.log = [];
     this.runs = [];
     this.selectedSeq = null;
+    this.finished = false;
+    this.swipeAnims = [];
     this.seq = 0;
     this.fx.particles = [];
     this.fx.tilt = 0;
@@ -170,19 +199,65 @@ export class BenchController {
     const dtMs = dt * 1000;
 
     // physics + telemetry (sim clock lives inside the engine)
-    const before = this.engine.state.phase;
-    this.route(this.engine.step(dtMs));
-    this.detector.tickRisks(this.engine.now);
-    this.route(this.bot.tick(this.engine.now));
-    // crash burst
-    if (before === "running" && this.engine.state.phase === "dead") this.renderer?.burst();
+    if (!this.finished) {
+      const before = this.engine.state.phase;
+      this.route(this.engine.step(dtMs));
+      this.detector.tickRisks(this.engine.now);
+      this.route(this.bot.tick(this.engine.now));
+      // crash burst
+      if (before === "running" && this.engine.state.phase === "dead") this.renderer?.burst();
+    }
 
     if (this.renderer) this.renderer.draw(this.engine.now, dt);
+    this.drawSwipeView(now);
 
     // throttle React updates to ~7 Hz
     if (now - this.lastSnapshot > 140) {
       this.lastSnapshot = now;
       this.emit();
+    }
+  }
+
+  /* Ghost phone: the run at 25% opacity with each swipe traced in red at the
+     speed it actually happened, then fading out. */
+  private drawSwipeView(now: number) {
+    const cv = this.swipeCanvas;
+    if (!cv) return;
+    const g = cv.getContext("2d")!;
+    g.clearRect(0, 0, cv.width, cv.height);
+    g.fillStyle = "#0b0c0e";
+    g.fillRect(0, 0, cv.width, cv.height);
+    if (this.canvas) {
+      g.globalAlpha = 0.25;
+      g.drawImage(this.canvas, 0, 0, cv.width, cv.height);
+      g.globalAlpha = 1;
+    }
+    const FADE = 1400;
+    this.swipeAnims = this.swipeAnims.filter((a) => now - a.t0 < a.dur + FADE);
+    for (const a of this.swipeAnims) {
+      const el = now - a.t0;
+      const base = a.pts[0]?.t ?? 0;
+      const alpha = el <= a.dur ? 1 : 1 - (el - a.dur) / FADE;
+      g.strokeStyle = `rgba(255,59,48,${alpha.toFixed(2)})`;
+      g.lineWidth = 5;
+      g.lineCap = "round";
+      g.lineJoin = "round";
+      g.beginPath();
+      let head: { x: number; y: number } | null = null;
+      for (let i = 0; i < a.pts.length; i++) {
+        const p = a.pts[i];
+        if (p.t - base > el) break;
+        if (i === 0) g.moveTo(p.x, p.y);
+        else g.lineTo(p.x, p.y);
+        head = p;
+      }
+      g.stroke();
+      if (head && el <= a.dur) {
+        g.fillStyle = `rgba(255,59,48,${alpha.toFixed(2)})`;
+        g.beginPath();
+        g.arc(head.x, head.y, 7, 0, Math.PI * 2);
+        g.fill();
+      }
     }
   }
 
@@ -206,6 +281,10 @@ export class BenchController {
             this.pushLog(ev.t, "flag", `RUN END: CRASH at score ${d.score} — $${((d.forfeited as number) ?? 0).toFixed(2)} forfeited`);
           else
             this.pushLog(ev.t, "good", `RUN END: CASHOUT — banked $${(d.banked as number).toFixed(2)} at ${(d.mult as number).toFixed(2)}x (score ${d.score})`);
+          if (this.cfg.runsTarget > 0 && this.runs.length >= this.cfg.runsTarget && !this.finished) {
+            this.finished = true;
+            this.pushLog(ev.t, "good", `target of ${this.cfg.runsTarget} runs reached — sim frozen, results are ready`);
+          }
           break;
         }
         case "move":
@@ -240,6 +319,8 @@ export class BenchController {
     this.swipes.push(f);
     if (this.swipes.length > 80) this.swipes.shift();
     this.selectedSeq = f.seq;
+    this.swipeAnims.push({ pts: f.pts, dur: Math.max(f.dur, 60), t0: performance.now() });
+    if (this.swipeAnims.length > 12) this.swipeAnims.shift();
     const dir = f.pts[f.pts.length - 1].x >= f.pts[0].x ? "R" : "L";
     this.pushLog(
       this.engine.now,
@@ -258,6 +339,7 @@ export class BenchController {
       verdict: v.label,
       overall: v.overall,
       ready: v.ready,
+      done: this.finished,
       signals: SIGNAL_NAMES.map((n) => {
         const s = v.signals.find((x) => x.name === n)!;
         return { name: n, sus: s.sus, ready: s.ready, detail: s.detail };
@@ -290,6 +372,7 @@ export class BenchController {
 
   /* ---- human input (ignored while a bot drives) ---- */
   private advanceState(): boolean {
+    if (this.finished) return true;
     const s = this.engine.state;
     if (s.phase === "idle") {
       this.route(this.engine.resetRun());

@@ -5,11 +5,11 @@ import type { BenchController } from "@/lib/ui/bench-controller";
 import { palette, setupCanvas, monoFont, useContainerWidth, binValues } from "@/lib/ui/chart-utils";
 import { stats, skewness } from "@/lib/detect/features";
 
-/**
+/*
  * Values past the domain get their own separated bin, drawn dimmer and labeled
- * "N+". Folding them into the last in-range bin (the previous behaviour) makes
- * the tail look like a mode at the axis maximum, which is exactly the shape
- * this chart exists to read.
+ * "N+". Folding them into the last in-range bin makes the tail look like a
+ * mode at the axis maximum, which is exactly the shape this chart exists to
+ * read.
  */
 function histogram(
   canvas: HTMLCanvasElement,
@@ -26,12 +26,12 @@ function histogram(
   g.clearRect(0, 0, W, H);
   g.strokeStyle = "rgba(154,164,176,0.12)";
   for (let y = 0; y < H; y += 30) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
-  g.fillStyle = p.ink3; g.font = monoFont(10);
-  g.textAlign = "left"; g.fillText(lo + unit, 4, H - 4);
   if (!values.length) {
+    g.fillStyle = p.ink3; g.font = monoFont(10);
+    g.textAlign = "left"; g.fillText(lo + unit, 4, H - 4);
     g.textAlign = "right"; g.fillText(hi + unit, W - 4, H - 4);
-    g.textAlign = "center"; g.fillStyle = p.ink3;
-    g.fillText("no samples yet", W / 2, H / 2);
+    g.textAlign = "center";
+    g.fillText("no samples yet; dodges land here as they happen", W / 2, H / 2);
     return;
   }
   const { counts, overflow } = binValues(values, lo, hi, bins);
@@ -45,9 +45,19 @@ function histogram(
     const h = (counts[i] / cmax) * (H - 34);
     g.fillRect(4 + i * bw, H - 16 - h, Math.max(1, bw - 1.5), h);
   }
-  g.textAlign = "right";
+  // x axis ticks at quarters, tallest-bar count on the left
   g.fillStyle = p.ink3;
-  g.fillText(hi + unit, 4 + plotW, H - 4);
+  g.font = monoFont(10);
+  for (let k = 0; k <= 4; k++) {
+    const x = 4 + plotW * (k / 4);
+    const v = lo + (hi - lo) * (k / 4);
+    g.strokeStyle = "rgba(154,164,176,0.3)";
+    g.beginPath(); g.moveTo(x, H - 16); g.lineTo(x, H - 12); g.stroke();
+    g.textAlign = k === 0 ? "left" : k === 4 ? "right" : "center";
+    g.fillText(+v.toFixed(2) + unit, x, H - 4);
+  }
+  g.textAlign = "left";
+  g.fillText("tallest bar = " + cmax, 4, 10);
   if (overflow) {
     const x = 4 + plotW + 10;
     const h = (overflow / cmax) * (H - 34);
@@ -63,8 +73,8 @@ export function DistributionCharts({ controller, version }: { controller: BenchC
   const mRef = useRef<HTMLCanvasElement>(null);
   const rtBox = useRef<HTMLDivElement>(null);
   const mBox = useRef<HTMLDivElement>(null);
-  const rtW = useContainerWidth(rtBox, { min: 240, max: 560 });
-  const mW = useContainerWidth(mBox, { min: 240, max: 560 });
+  const rtW = useContainerWidth(rtBox, { min: 240, max: 640 });
+  const mW = useContainerWidth(mBox, { min: 240, max: 640 });
   const rts = controller?.detector.rts ?? [];
   const margins = controller?.detector.margins ?? [];
 
@@ -83,10 +93,15 @@ export function DistributionCharts({ controller, version }: { controller: BenchC
 
   return (
     <section className="panel">
-      <div className="panel-head"><h2>Distributions</h2><span className="sub">reaction time · dodge margin</span></div>
-      <div className="panel-body" style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
-        <div ref={rtBox} style={{ flex: 1, minWidth: 260 }}>
-          <div className="eyebrow" style={{ marginBottom: 6 }}>reaction-time distribution</div>
+      <div className="hline">
+        distributions <span className="dim">one bar = one bin, bar height = how many dodges landed in it</span>
+      </div>
+      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", padding: 14 }}>
+        <div ref={rtBox} style={{ flex: 1, minWidth: 280 }}>
+          <div className="rowline" style={{ minHeight: 22 }}>
+            <span className="lbl" style={{ width: "auto" }}>reaction time per dodge</span>
+            <span className="note">from a car turning threat to the swipe that dodged it · 40 ms bins</span>
+          </div>
           <canvas ref={rtRef} style={{ background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 4, maxWidth: "100%" }} />
           <div className="mono tiny muted" style={{ marginTop: 4 }}>
             {rtStat
@@ -95,8 +110,11 @@ export function DistributionCharts({ controller, version }: { controller: BenchC
               : "n 0"}
           </div>
         </div>
-        <div ref={mBox} style={{ flex: 1, minWidth: 260 }}>
-          <div className="eyebrow" style={{ marginBottom: 6 }}>dodge-margin distribution</div>
+        <div ref={mBox} style={{ flex: 1, minWidth: 280 }}>
+          <div className="rowline" style={{ minHeight: 22 }}>
+            <span className="lbl" style={{ width: "auto" }}>dodge margin</span>
+            <span className="note">seconds to spare when the dodge cleared · 0.05 s bins · tight spread = metronome</span>
+          </div>
           <canvas ref={mRef} style={{ background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 4, maxWidth: "100%" }} />
           <div className="mono tiny muted" style={{ marginTop: 4 }}>
             {mStat

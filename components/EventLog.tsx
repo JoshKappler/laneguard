@@ -38,7 +38,7 @@ export function EventLog({
       className="panel"
       style={grow ? { flex: 1, minHeight: 220, display: "flex", flexDirection: "column" } : undefined}
     >
-      <div className="panel-head"><h2>Event log</h2><span className="mono sub">{controller?.clock() ?? ""}</span></div>
+      <div className="hline">event log <span className="dim">{controller?.clock() ?? ""}</span></div>
       <div
         className="panel-body"
         style={{

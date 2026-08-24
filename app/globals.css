@@ -262,3 +262,78 @@ button:focus-visible {
 .col { display: flex; flex-direction: column; }
 .muted { color: var(--ink-3); }
 .tiny { font-size: 11px; }
+
+/* one-line rows: label · control · value, no eyebrows, no stacked headers */
+.rowline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  min-height: 27px;
+  font-size: 12px;
+}
+.rowline .lbl {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  flex: none;
+  width: var(--lbl-w, 128px);
+}
+.rowline input[type="number"] { width: 62px; padding: 3px 6px; }
+.rowline input[type="range"] { flex: 1; min-width: 50px; }
+.rowline select { max-width: 150px; }
+.rowline .note { font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+
+/* compact numerics: the spinner eats a third of a 60px field */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* single-line panel head that carries its own data */
+.hline {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hline .dim { color: var(--ink-3); }
+
+/* top navigation: three pages + writeup, no product title */
+.navbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  margin-bottom: 14px;
+}
+.navbar a {
+  color: var(--ink-3);
+  padding: 4px 9px;
+  border-radius: var(--r-chip);
+}
+.navbar a:hover { color: var(--ink); text-decoration: none; }
+.navbar a.on { color: var(--accent); background: rgba(61, 220, 255, 0.06); }
+.navbar .right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink-3);
+  font-size: 11px;
+}

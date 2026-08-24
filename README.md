@@ -14,12 +14,17 @@ not the motor forensics, are what actually bind a bot.
 > it. Every number in the UI and docs comes from code that ran; nothing is
 > invented, and first-principles priors are labeled as priors.
 
-The bench catching the naive scripted bot: four smoking-gun flags, BOT at 75%
+The bench is three pages: **setup** (pick a driver, point the anti-cheat at it,
+record and mutate real swipes for the replay corpus), **run** (the game beside a
+ghost phone that traces every swipe in red at its actual speed), and **results**
+(verdict, distributions, swipe forensics, the economy).
+
+The run view catching the naive scripted bot: four smoking-gun flags, BOT at 75%
 confidence.
 
-![The bench calling the naive scripted bot BOT](docs/shots/bench-naive-bot.png)
+![The run view calling the naive scripted bot BOT](docs/shots/bench-naive-bot.png)
 
-The stealth camouflage bot on the same detector: every signal green, HUMAN at 4%
+The stealth camouflage bot on the same detector: every signal green, HUMAN at low
 confidence. The project is built around reporting this honestly.
 
 ![The stealth camouflage bot reading HUMAN](docs/shots/bench-stealth-human.png)
@@ -49,7 +54,7 @@ lib/econ/       economy break-even, skill-matched population, head-to-head
                 match sim (win rates from play), 7-day cadence
 lib/bench/      headless deterministic session runner (the batch/test workhorse)
 lib/ui/         browser controller (rAF loop) + canvas renderer + config hooks
-app/, components/  the Next.js dashboard + /writeup
+app/, components/  the Next.js bench (setup / run / results) + /writeup
 scripts/        batch runner + calibration pipeline + parallel evolution sweep
 test/           golden-file parity vs the legacy build, determinism, behavior, ROC
 legacy/         the original single-file prototype (kept for parity reference)

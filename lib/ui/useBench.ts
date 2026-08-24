@@ -1,113 +1,43 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  DEFAULT_CONFIG,
-  decodeConfig,
-  encodeConfig,
-  mergeConfig,
-  type BenchConfig,
-  type DeepPartial,
-} from "@/lib/core/config";
-import { BenchController, type BenchSnapshot } from "./bench-controller";
+import { useCallback, useEffect, useState } from "react";
+import type { BenchConfig, DeepPartial } from "@/lib/core/config";
+import type { TracePoint } from "@/lib/attack/bot";
+import type { BenchSnapshot } from "./bench-controller";
+import { benchStore } from "./bench-store";
 
-const STORAGE_KEY = "laneguard.config.v2";
-
-function readInitialConfig(): BenchConfig {
-  if (typeof window === "undefined") return DEFAULT_CONFIG;
-  const url = new URL(window.location.href);
-  const c = url.searchParams.get("c");
-  if (c) {
-    const cfg = decodeConfig(c);
-    return cfg;
-  }
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return mergeConfig(DEFAULT_CONFIG, JSON.parse(raw));
-  } catch {
-    /* ignore */
-  }
-  return DEFAULT_CONFIG;
-}
-
+/** Thin React binding over the module-singleton bench store. */
 export function useBench() {
-  const controllerRef = useRef<BenchController | null>(null);
-  const [config, setConfigState] = useState<BenchConfig>(DEFAULT_CONFIG);
-  const [snapshot, setSnapshot] = useState<BenchSnapshot | null>(null);
+  const [, force] = useState(0);
   const [hydrated, setHydrated] = useState(false);
 
-  // create controller once, after mount (needs window)
   useEffect(() => {
-    const initial = readInitialConfig();
-    setConfigState(initial);
-    const ctrl = new BenchController(initial, { onSnapshot: setSnapshot });
-    controllerRef.current = ctrl;
-    ctrl.start();
+    benchStore.ensure();
     setHydrated(true);
-    return () => ctrl.stop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return benchStore.subscribe(() => force((n) => n + 1));
   }, []);
 
-  const persist = useCallback((cfg: BenchConfig) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
-      const url = new URL(window.location.href);
-      const enc = encodeConfig(cfg);
-      if (enc) url.searchParams.set("c", enc);
-      else url.searchParams.delete("c");
-      window.history.replaceState(null, "", url.toString());
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  /** full config change → rebuild + reset the run */
-  const applyConfig = useCallback(
-    (cfg: BenchConfig) => {
-      setConfigState(cfg);
-      controllerRef.current?.setConfig(cfg);
-      persist(cfg);
-    },
-    [persist]
-  );
-
-  const patchConfig = useCallback(
-    (patch: DeepPartial<BenchConfig>) => {
-      setConfigState((prev) => {
-        const next = mergeConfig(prev, patch);
-        controllerRef.current?.setConfig(next);
-        persist(next);
-        return next;
-      });
-    },
-    [persist]
-  );
-
-  /** live toggle without a full reset (mode, hwInject, showHitbox) */
+  const applyConfig = useCallback((cfg: BenchConfig) => benchStore.applyConfig(cfg), []);
+  const patchConfig = useCallback((p: DeepPartial<BenchConfig>) => benchStore.patchConfig(p), []);
   const setLive = useCallback(
-    (p: { mode?: BenchConfig["mode"]; hwInject?: boolean; showHitbox?: boolean }) => {
-      controllerRef.current?.setLive(p);
-      setConfigState((prev) => {
-        const next = { ...prev };
-        if (p.mode !== undefined) next.mode = p.mode;
-        if (p.hwInject !== undefined) next.hwInject = p.hwInject;
-        persist(next);
-        return next;
-      });
-    },
-    [persist]
+    (p: { mode?: BenchConfig["mode"]; hwInject?: boolean; showHitbox?: boolean }) => benchStore.setLive(p),
+    []
   );
-
-  const resetTelemetry = useCallback(() => controllerRef.current?.resetAll(), []);
+  const resetTelemetry = useCallback(() => benchStore.resetTelemetry(), []);
+  const addTrace = useCallback((t: TracePoint[]) => benchStore.addTrace(t), []);
+  const clearCorpus = useCallback(() => benchStore.clearCorpus(), []);
 
   return {
-    controller: controllerRef.current,
-    config,
-    snapshot,
+    controller: hydrated ? benchStore.controller : null,
+    config: benchStore.config,
+    snapshot: benchStore.snapshot as BenchSnapshot | null,
+    corpus: benchStore.corpus,
     hydrated,
     applyConfig,
     patchConfig,
     setLive,
     resetTelemetry,
+    addTrace,
+    clearCorpus,
   };
 }

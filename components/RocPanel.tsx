@@ -131,9 +131,9 @@ export function RocPanel() {
 
   return (
     <section className="panel">
-      <div className="panel-head">
-        <h2>Calibration &amp; ROC</h2>
-        <span className="mono sub">
+      <div className="hline">
+        calibration + ROC{" "}
+        <span className="dim">
           {calibrated
             ? `${cal.humanCorpus.swipes} human swipes · FPR ≤ ${(cal.fprTarget * 100).toFixed(2)}%`
             : "first-principles priors — no corpus yet"}
@@ -164,7 +164,7 @@ export function RocPanel() {
               </div>
             </div>
             <div style={{ flex: "2 1 460px", minWidth: 260 }}>
-              <div className="eyebrow" style={{ marginBottom: 8 }}>
+              <div className="mono tiny muted" style={{ marginBottom: 8 }}>
                 what each live cut is derived from
               </div>
               <table className="mono" style={{ borderCollapse: "collapse", fontSize: 11.5, width: "100%" }}>
@@ -191,7 +191,7 @@ export function RocPanel() {
                 .filter(([, f]) => f.curve)
                 .map(([name, f]) => <RocMini key={name} f={f} name={name} />)}
             </div>
-            <div className="eyebrow" style={{ marginBottom: 6 }}>AUC matrix — feature × attacker class (0.5 = indistinguishable)</div>
+            <div className="mono tiny muted" style={{ marginBottom: 6 }}>AUC matrix — feature × attacker class (0.5 = indistinguishable)</div>
             <AucMatrix matrix={cal.aucMatrix} />
             <div className="mono tiny muted" style={{ marginTop: 8, maxWidth: "70ch" }}>{cal.note}</div>
           </div>

@@ -1,41 +1,25 @@
 /*
- * Attacker models, all driven through the same input pipeline the human uses.
- * The detector never sees which one is running.
- *
+ * Attacker models, all driven through the same input pipeline the human uses;
+ * the detector never sees which one is running.
  *   perfect    — instant reaction, machine-clean synthetic swipes
  *   mirror     — perturbed replay of a small recorded-trace corpus
- *   generative — a fresh human-shaped trace per swipe, iid or organic noise
- *
- * On top of `generative` this build adds the stealth kit that the legacy demo
- * lacked, so the arms race has a rung that beats the WHOLE client-side
- * detector, not just the swipe-level signals:
- *   - ex-Gaussian reaction times (a real lapse tail, defeating the skew check)
- *   - RT gating to threat onset (kills the superhuman-floor artifact a planner
- *     otherwise produces when a threat appears between decision and execution)
- *   - deliberate contested-space entries that sometimes genuinely crash, and
- *     fake aborted gestures — so behavior texture looks human and, critically,
- *     the risks actually COST something.
- *
- * The point of shipping this is honesty: it forces the reader to the economic
- * argument, which is the only layer it cannot beat.
+ *   generative — a fresh human-shaped trace per swipe, iid or organic noise,
+ *                plus the stealth kit: ex-Gaussian RTs gated to threat onset,
+ *                real contested-space risks, fake aborts. See REPORT.md §3.
  */
 import type { BotConfig, PlayMode } from "@/lib/core/config";
 import { mulberry32, gauss, type Rand } from "@/lib/core/rng";
 import type { Car, Engine, TelemetryEvent } from "@/lib/sim/engine";
 
-interface TracePoint {
+export interface TracePoint {
   x: number;
   y: number;
   t: number;
 }
 
-/**
- * What a scheduled swipe is FOR. The direction is deliberately re-derived at
- * fire time rather than trusted from scheduling time — a reaction delay is long
- * enough for the road to change, and a stale direction is how a planner steers
- * into a car that was not there when it decided. Only a deliberate risk keeps
- * its original direction, because the whole point of that move is the contested
- * lane it picked.
+/*
+ * Direction is re-derived at fire time (the road changes during a reaction
+ * delay); only a deliberate risk keeps its original contested direction.
  */
 type Intent = "react" | "bank" | "risk";
 
@@ -86,6 +70,11 @@ export class Bot {
     this.buildCorpus();
     this.nextAbortAt = this.scheduleNext(cfg.abortsPerMin);
     this.nextRiskAt = this.scheduleNext(cfg.riskPerMin);
+  }
+
+  /** replace the synthesized corpus with user-recorded traces (mirror mode) */
+  setCorpus(traces: TracePoint[][]) {
+    if (traces.length) this.baseTraces = traces;
   }
 
   private scheduleNext(perMin: number): number {

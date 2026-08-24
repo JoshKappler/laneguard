@@ -86,6 +86,8 @@ export interface BotConfig {
     corpusSize: number;
     perturbPx: number;
     scaleVar: number;
+    /** replay the user-recorded swipe corpus instead of the synthesized one */
+    useRecorded: boolean;
   };
   /** time-to-impact (s) below which the perfect bot fires immediately */
   perfectUrgency: number;
@@ -260,6 +262,8 @@ export interface BenchConfig {
   mode: PlayMode;
   /** deliver bot events as trusted, the way a phone-farm rig or OS driver would */
   hwInject: boolean;
+  /** stop the bench after this many completed runs; 0 = run until stopped */
+  runsTarget: number;
   game: GameConfig;
   bot: BotConfig;
   detector: DetectorConfig;
@@ -270,6 +274,7 @@ export const DEFAULT_CONFIG: BenchConfig = {
   seed: 1337,
   mode: "human",
   hwInject: false,
+  runsTarget: 0,
   game: {
     laneMult: [5, 2, 1, 0],
     lanePx: 62,
@@ -316,7 +321,7 @@ export const DEFAULT_CONFIG: BenchConfig = {
       driftX: 2.2,
       driftY: 2.6,
     },
-    mirror: { corpusSize: 4, perturbPx: 1.6, scaleVar: 0.08 },
+    mirror: { corpusSize: 4, perturbPx: 1.6, scaleVar: 0.08, useRecorded: false },
     perfectUrgency: 0.95,
     cashout: { target: null, calm: 1.2 },
     skill: { errorRate: 0 },
