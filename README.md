@@ -14,6 +14,16 @@ not the motor forensics, are what actually bind a bot.
 > it. Every number in the UI and docs comes from code that ran; nothing is
 > invented, and first-principles priors are labeled as priors.
 
+The bench catching the naive scripted bot: four smoking-gun flags, BOT at 75%
+confidence.
+
+![The bench calling the naive scripted bot BOT](docs/shots/bench-naive-bot.png)
+
+The stealth camouflage bot on the same detector: every signal green, HUMAN at 4%
+confidence. The project is built around reporting this honestly.
+
+![The stealth camouflage bot reading HUMAN](docs/shots/bench-stealth-human.png)
+
 ## Run it
 
 ```bash
@@ -117,6 +127,8 @@ conditional, and the conditions are worth more than the claim:
   to bank well is an anti-cheat lever, and a cheaper one than a detector.
 
 Full tables and method in [REPORT.md](REPORT.md) §5a.
+
+![Calibration priors beside the server-side economy and cadence panels](docs/shots/bench-economy.png)
 
 ## Calibration
 
