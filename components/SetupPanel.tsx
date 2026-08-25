@@ -69,6 +69,7 @@ function driverIdOf(cfg: BenchConfig): string {
   if (cfg.mode === "human") return "human-baseline";
   if (cfg.mode === "perfect") return "naive-scripted";
   if (cfg.mode === "mirror") return "replay-farm";
+  if (cfg.bot.plan) return "route-planner";
   return cfg.bot.gateRtToThreat ? "stealth-camouflage" : "evasive-generative";
 }
 
@@ -173,6 +174,22 @@ export function SetupPanel({
               never react faster than a sampled human RT after threat onset
             </label>
           </div>
+          <div className="rowline">
+            <span className="lbl">routing</span>
+            <label className="toggle">
+              <input type="checkbox" checked={bot.plan} onChange={(e) => onPatch(makePatch("bot.plan", e.target.checked))} />
+              plan a surviving route ~6 s ahead instead of dodging one step
+            </label>
+          </div>
+          {slider(
+            "throw rate",
+            "bot.throwRate",
+            bot.throwRate,
+            0,
+            0.6,
+            0.05,
+            "share of runs lost on purpose: it picks a score and stops dodging there"
+          )}
           <div className="rowline">
             <span className="lbl">motor noise</span>
             <select

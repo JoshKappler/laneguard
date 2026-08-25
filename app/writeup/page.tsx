@@ -165,17 +165,19 @@ export default function Writeup() {
       <Table
         head={["attacker", "verdict @180s", "ever SUSP", "ever BOT", "conf", "t→BOT", "jitter", "Δ⁴/Δ²", "RT floor"]}
         rows={[
-          ["naive scripted", "BOT 100%", "0/12", "12/12", "0.75", "14 s", "0.00", "0.00", "81 ms"],
-          ["replay farm (injected)", "BOT 100%", "0/12", "12/12", "0.75", "23 s", "1.82", "2.27", "65 ms"],
-          ["evasive generative", "BOT 50%", "9/12", "9/12", "0.56", "51 s *", "1.62", "1.76", "64 ms"],
-          ["stealth camouflage", "HUMAN 12/12", "0/12", "0/12", "0.08", "never", "1.62", "1.74", "235 ms"],
+          ["naive scripted", "BOT 100%", "0/12", "12/12", "0.75", "12 s", "0.00", "0.00", "125 ms"],
+          ["replay farm (injected)", "BOT 100%", "0/12", "12/12", "0.75", "19 s", "1.82", "2.27", "61 ms"],
+          ["evasive generative", "BOT 42%", "7/12", "9/12", "0.55", "63 s *", "1.64", "1.77", "74 ms"],
+          ["stealth camouflage", "HUMAN 12/12", "0/12", "0/12", "0.08", "never", "1.63", "1.75", "239 ms"],
+          ["route planner", "HUMAN 12/12", "1/12", "0/12", "0.09", "never", "1.63", "1.77", "236 ms"],
         ]}
-        hot={(r, c) => r === 3 && c === 3}
+        hot={(r, c) => (r === 3 || r === 4) && c === 3}
       />
       <P dim>
         * median over the nine seeds that reached BOT at all, not over all twelve. The evasive bot
-        touches SUSPECT and BOT on nine of twelve seeds; reading the final verdict alone
-        understates the detector. The stealth bot never touches SUSPECT or BOT on any seed.
+        touches BOT on nine of twelve seeds; reading the final verdict alone
+        understates the detector. The stealth bot never touches SUSPECT or BOT on any seed, and
+        the route planner never reaches BOT (one of twelve seeds brushed SUSPECT and came back).
         The replay row runs against the synthesized corpus, capped at 8 distinct traces, which
         keeps replay similarity saturated; replaying a large corpus of real recorded swipes
         starves that signal and is not measured here.
@@ -227,6 +229,49 @@ export default function Writeup() {
         reach BOT. &ldquo;Invisible&rdquo; was never the claim; the precise
         statement is that the client-side detector never gets enough to act on. That is the
         ceiling of client-side behavioral detection.
+      </P>
+      <P>
+        There is a harder version of the problem, and it is the one worth planning against.
+        Every attacker above is a one-step dodger: it reads what threatens it now and picks a
+        lane that is clear now. That is why all of them <em>lose money</em>. They survive a
+        median 26 to 30&nbsp;s, and a forfeited run costs the full $3.01 entry however high the
+        score climbed. A convincing disguise on a losing player is not yet a business.
+      </P>
+      <P>
+        The <strong>route planner</strong> changes the planner instead of the disguise. Each
+        decision extrapolates every on-screen car and barrier about six seconds forward and
+        searches lane routes for one that survives with enough margin that its own humanized
+        execution, the reaction-time tail and the gesture wander, cannot turn a planned move
+        into a crash. The injected human error stays exactly where it was; it is what the
+        detector measures, and it is no longer load-bearing on the road. Measured on 240
+        holdout courses whose seeds it was never tuned against:
+      </P>
+      <Table
+        head={["attacker", "banks", "avg bank", "solo net", "win rate", "EV per game"]}
+        rows={[
+          ["evasive generative", "1.7%", "$1.92", "-$2.98", "36.5%", "-$1.25"],
+          ["stealth camouflage", "33.8%", "$0.60", "-$2.81", "55.9%", "-$0.32"],
+          ["route planner", "45.4%", "$5.65", "-$0.45", "66.4%", "+$0.19"],
+        ]}
+        hot={(r, c) => r === 2 && (c === 4 || c === 5)}
+      />
+      <P>
+        Read the last two columns. Solo play loses money for every attacker here and for the
+        modeled humans too, because the payout curve pays a flat 1.289x from 5,582 to 8,497 and
+        only reaches its 2.5x cap at 10,000: a run has to survive almost to the plateau before
+        the $3.01 entry comes back. That is the game&apos;s economics, not an attacker weakness.
+        The mode that pays is the one the game runs, a 1v1 pot with a 20% rake, where break-even
+        is a 62.5% win rate. Only the planner clears it, at 66.4% over 1,440 shared-course
+        pairings, worth +$0.19 a game, and it does so while reading HUMAN and never reaching BOT
+        on any seed.
+      </P>
+      <P>
+        The margin is thin, which is what makes the throw dial interesting. A bot that banks
+        every run it can is detectable on win rate alone, whatever its input texture looks like,
+        so <code>throwRate</code> sets the share of runs it loses on purpose: it picks a score in
+        advance and stops dodging there, which reads as a missed turn. At 0.15 the win rate
+        falls to 65.0% and EV to +$0.12; at 0.30 it is 60.2% and -$0.11. Camouflage is bought
+        with EV, and the dial can only lower the win rate, never raise it.
       </P>
 
       <H n="03">The seven signals</H>

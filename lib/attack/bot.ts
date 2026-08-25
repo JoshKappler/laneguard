@@ -10,6 +10,7 @@
 import type { BotConfig, PlayMode } from "@/lib/core/config";
 import { mulberry32, gauss, type Rand } from "@/lib/core/rng";
 import type { Car, Engine, TelemetryEvent } from "@/lib/sim/engine";
+import { Planner, TUNE } from "@/lib/attack/planner";
 
 export interface TracePoint {
   x: number;
@@ -54,6 +55,11 @@ export class Bot {
   private baseTraces: TracePoint[][] = [];
   private nextAbortAt: number;
   private nextRiskAt: number;
+  private planner: Planner | null = null;
+  private nextPlanAt = 0;
+  private runTarget: number | null = null;
+  private throwAt: number | null = null;
+  private sawRunEnd = false;
 
   constructor(
     engine: Engine,
@@ -67,6 +73,9 @@ export class Bot {
     this.mode = mode;
     this.hwInject = hwInject;
     this.rand = mulberry32(seed);
+    if (cfg.plan) this.planner = new Planner(engine);
+    this.runTarget = this.drawTarget();
+    this.throwAt = this.drawThrow();
     this.buildCorpus();
     this.nextAbortAt = this.scheduleNext(cfg.abortsPerMin);
     this.nextRiskAt = this.scheduleNext(cfg.riskPerMin);
@@ -138,7 +147,7 @@ export class Bot {
     }
     for (const car of s.cars) {
       if (car === threatCar || car.passed || car.lane !== l) continue;
-      const lead = e.closing(car) * 0.55 + e.COLL_Z;
+      const lead = e.closing(car) * 0.38 + e.COLL_Z;
       if (car.z > -e.COLL_Z - 1 && car.z < lead) return false;
     }
     return true;
@@ -172,8 +181,33 @@ export class Bot {
     return Math.min(t1, t2 + 0.75);
   }
 
+  /** a crossing is exposed to its boundary from now to ~0.55 s out, so any
+   *  slab on it or arriving inside that window blocks the move */
   private crossOk(from: number, dir: number): boolean {
-    return !this.engine.barrierBlocks(from, from + dir, this.engine.state.speed * 0.45);
+    const e = this.engine,
+      s = e.state;
+    const b = Math.min(from, from + dir);
+    const lo = -e.HLZ - 1;
+    const hi = s.speed * 0.55 + e.HLZ + 1;
+    for (const bar of s.barriers) {
+      if (bar.boundary !== b) continue;
+      if (bar.z1 > lo && bar.z0 < hi) return false;
+    }
+    return true;
+  }
+
+  /** the 5x lane has one exit, so it is a sprint lane: worth holding only
+   *  while its approach field and its escape boundary are both long-clear */
+  private lane0Safe(): boolean {
+    const e = this.engine,
+      s = e.state;
+    for (const car of s.cars)
+      if (!car.passed && car.lane === 0 && car.z > -e.COLL_Z && car.z < s.speed * 1.6)
+        return false;
+    for (const bar of s.barriers)
+      if (bar.boundary === 0 && bar.z1 > -e.HLZ && bar.z0 < s.speed * 1.6)
+        return false;
+    return true;
   }
 
   /** seconds until lane l's nearest approaching car shuts its entry window */
@@ -191,7 +225,23 @@ export class Bot {
     return m;
   }
 
+  /** route through the planner when configured, heuristics otherwise.
+   *  `firing` = the pending already waited out its latency, so only the
+   *  trace's run-up to the swipe threshold remains */
+  private route(firing = false): { dir: number; at: number } {
+    const s = this.engine.state;
+    if (this.throwing()) return { dir: 0, at: 0 };
+    if (!this.planner) return { dir: this.safeDir(), at: 0 };
+    if (s.x !== s.lane) return { dir: 0, at: 0 };
+    const lat =
+      this.mode === "perfect" || firing
+        ? 2
+        : Math.ceil((this.cfg.rt.floor + 140) / 50) + TUNE.latBump;
+    return this.planner.decide(this.wantBank(), lat);
+  }
+
   private safeDir(): number {
+    if (this.throwing()) return 0;
     const e = this.engine,
       s = e.state,
       cfg = e.cfg;
@@ -204,8 +254,13 @@ export class Bot {
     // the reference player never retreats from 5X (the badge log shows 5X at
     // the very end of the run), so greed does not cool with speed
     const greed = 0.55;
+    const spr = this.lane0Safe();
     const val = (l: number) =>
-      l === e.cashLane && !this.wantBank() ? -1.5 : cfg.laneMult[l] * greed;
+      l === e.cashLane && !this.wantBank()
+        ? -1.5
+        : l === 0 && !spr
+          ? 0.15
+          : cfg.laneMult[l] * greed;
     // survival first: rank lanes by safety class, and let value pick only
     // among equally safe lanes (the reference player's shape)
     const cls = (t: number) => (t >= 1.45 ? 2 : t >= 0.95 ? 1 : 0);
@@ -229,7 +284,12 @@ export class Bot {
 
     interface Cand { l: number; t: number; v: number }
     const cands: Cand[] = [];
-    if (!trapped) cands.push({ l: here, t: tHere, v: val(here) + 0.25 });
+    if (!trapped)
+      cands.push({
+        l: here,
+        t: tHere,
+        v: val(here) * (Math.min(this.lookahead(here), 4) / 4) + 0.25,
+      });
     for (let l = 0; l < e.laneCount; l++) {
       if (l === here) continue;
       const dir = Math.sign(l - here);
@@ -245,8 +305,7 @@ export class Bot {
           break;
         }
       }
-      // the cashout lane is a dead-end escape (convoys can box you in until
-      // the timer banks $0), so take it only when no traffic lane is timeable
+      // the cashout lane is a dead-end escape: only when nothing is timeable
       if (l === e.cashLane && !this.wantBank()) {
         if (cls(tHere) > 0) continue;
         let alt = tHere;
@@ -257,7 +316,14 @@ export class Bot {
       // trapped: a tight merge beats the guaranteed dead bank
       const passable = trapped ? this.firstObs(l) > 0.7 : this.laneClear(l, null);
       if (!ok || !passable) continue;
-      cands.push({ l, t: this.lookahead(l), v: val(l) - 0.12 * Math.abs(l - here) });
+      const th = this.lookahead(l);
+      // value discounts with the lane's clear horizon: sprint high-value
+      // lanes while they are open, drift out as their window closes
+      cands.push({
+        l,
+        t: th,
+        v: val(l) * (Math.min(th, 4) / 4) - 0.12 * Math.abs(l - here),
+      });
     }
     // value-first among habitable lanes; survival-first when nothing is
     const habs = cands.filter((c) => habitable(c.l, c.t));
@@ -312,10 +378,37 @@ export class Bot {
   }
 
   /** true once the run has banked enough score that the player should stop
-   *  seeking value and go cash out. null target = never (legacy behavior). */
+   *  seeking value and go cash out. null target = never (legacy behavior).
+   *  Under duress (the planner sees no surviving route) any in-the-money
+   *  score is worth banking instead of forfeiting. */
   private wantBank(): boolean {
-    const t = this.cfg.cashout.target;
-    return t != null && this.engine.state.score >= t;
+    const c = this.cfg.cashout;
+    const sc = this.engine.state.score;
+    if (this.throwing()) return false;
+    if (this.runTarget != null && sc >= this.runTarget) return true;
+    if (c.duress == null || sc < c.duress || !this.planner) return false;
+    return this.planner.lastDoomed || this.planner.lastDepth < TUNE.duressDepth;
+  }
+
+  /** banking at an identical score every run is a texture tell */
+  private drawTarget(): number | null {
+    const c = this.cfg.cashout;
+    if (c.target == null) return null;
+    if (c.targetMax == null || c.targetMax <= c.target) return c.target;
+    return c.target + this.rand() * (c.targetMax - c.target);
+  }
+
+  /** score this run stops dodging at, or null to play it out */
+  private drawThrow(): number | null {
+    const r = this.cfg.throwRate;
+    if (!(r > 0) || this.rand() >= r) return null;
+    const hi = this.runTarget ?? 6000;
+    return 1200 + this.rand() * Math.max(0, hi - 1200);
+  }
+
+  /** past the designated miss point: hold the lane and let the run end */
+  private throwing(): boolean {
+    return this.throwAt != null && this.engine.state.score >= this.throwAt;
   }
 
   /** one safe step toward the cashout lane, or 0 to hold/wait. Never crosses
@@ -361,7 +454,13 @@ export class Bot {
     if (e.state.phase !== "running") {
       this.pending = null;
       this.swipeRun = null;
+      this.sawRunEnd = true;
       return out;
+    }
+    if (this.sawRunEnd) {
+      this.sawRunEnd = false;
+      this.runTarget = this.drawTarget();
+      this.throwAt = this.drawThrow();
     }
 
     // Stealth camouflage actions (fake aborts, deliberate risks) only happen
@@ -430,7 +529,17 @@ export class Bot {
       // instead and try to bank again once it is calm.
       let dir: number;
       if (pend.intent === "risk") dir = pend.dir;
-      else if (pend.intent === "bank")
+      else if (this.planner) {
+        const r = this.route(true);
+        // a swipe leaves NOW; a later-scheduled route may rebook, but once a
+        // threat is close the reactive heuristic executes instead of waiting
+        if (r.dir && r.at === 0) dir = r.dir;
+        else if (this.firstObs(e.state.lane) < TUNE.deadline) dir = this.safeDir();
+        else if (r.dir) {
+          this.pending = { ...pend, fireAt: now + Math.max(50, r.at * 50 - 100) };
+          return out;
+        } else dir = 0;
+      } else if (pend.intent === "bank")
         dir = this.creditedThreat(e.state.lane) ? this.safeDir() : this.bankStep();
       else dir = this.safeDir();
       if (dir) this.startSwipe(dir, now);
@@ -443,10 +552,15 @@ export class Bot {
 
     // perfect: scripted, instant reaction, no RT model at all
     if (this.mode === "perfect") {
-      const dir =
-        this.wantBank() && this.firstObs(e.state.lane) > this.cfg.cashout.calm
-          ? this.bankStep()
-          : this.safeDir();
+      let dir: number;
+      if (this.planner) {
+        const r = this.route();
+        dir = r.at === 0 ? r.dir : 0;
+      } else
+        dir =
+          this.wantBank() && this.firstObs(e.state.lane) > this.cfg.cashout.calm
+            ? this.bankStep()
+            : this.safeDir();
       if (dir) this.startSwipe(dir, now);
       return out;
     }
@@ -491,12 +605,34 @@ export class Bot {
     // RT is credited for this move.
     const banking =
       this.wantBank() && this.firstObs(e.state.lane) > this.cfg.cashout.calm;
+    if (this.planner) {
+      if (now < this.nextPlanAt) return out;
+      this.nextPlanAt = now + 60;
+      const r = this.route();
+      // book the plan's exit as a scheduled gesture; anything further out
+      // than ~1.3 s stays unbooked so replans keep re-validating it. With a
+      // threat closing and no bookable route, the reactive heuristic drives.
+      if (r.dir && r.at <= 26) {
+        const rt = this.sampleRt();
+        const primedMs = Math.max(this.cfg.rt.floor, rt * 0.45);
+        this.pending = {
+          fireAt: now + Math.max(primedMs, r.at * 50 - 100),
+          dir: 0,
+          rt,
+          intent: banking ? "bank" : "react",
+          threatAt: 0,
+        };
+        return out;
+      }
+      if (this.firstObs(e.state.lane) >= TUNE.deadline) return out;
+    }
     const dir = banking ? this.bankStep() : this.safeDir();
     if (!dir) return out;
     const rt = this.sampleRt();
     // planned repositions (hop back to value, exit the cashout trap) fire with
     // primed latency: the human pre-planned them, and nothing credits an RT
     const primed =
+      this.planner !== null ||
       (e.state.lane === e.cashLane && !this.wantBank() && e.state.cashTimer > 0) ||
       (!banking && this.firstObs(e.state.lane) > 1.5);
     this.pending = {
@@ -599,8 +735,11 @@ export class Bot {
         nx = (r() - 0.5) * N.iidAmpX;
         ny = (r() - 0.5) * N.iidAmpY;
       }
+      // wander must never cross the swipe threshold against the intended
+      // direction: that would commit a wrong-way lane change
+      const floor = -(this.engine.cfg.swipeThreshold - 6);
       trace.push({
-        x: p * len + nx,
+        x: Math.max(p * len + nx, floor),
         y: Math.sin(u * Math.PI) * arc + ny,
         t: u * dur,
       });

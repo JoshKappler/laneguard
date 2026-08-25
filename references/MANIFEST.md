@@ -247,8 +247,12 @@ in the simulator was re-fitted frame-by-frame against it:
   underdamped spring, wave spacing/mix, per-lane traffic weights, traffic
   forward speed (~half road speed), barrier placement
 - continuous lane-scaled scoring (0.50 per z in a 1x lane) and the dollar payout
-  curve read off the HUD point by point, break-even ~5,430, flat 1.29x tier at
-  5,582, lobby tiers to 3.0x
+  curve read off the HUD point by point, break-even ~5,430, flat 1.29x tier from
+  5,582 to at least 7,824 ($3.88 at both score 6,191 and 7,824). The run died at
+  7,871, so the curve above that is NOT measured: the simulator carries a prior
+  that climbs to a 2.5x cap plateauing at 10,000, which is the shipped game's
+  behavior per the project owner, not a fit to this recording. An earlier build
+  interpolated to a 3.0x cap with no plateau; that was a guess and is corrected.
 - HUD geometry (dollar/score/badge sizes and baselines, slashed zeros, the READY
   1X placeholder), READY/GO sequence timing, and the crash screen roll-down
 - traffic discipline (2026-08-25 pass over 12 frames spanning the run): the

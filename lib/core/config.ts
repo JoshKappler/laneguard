@@ -49,9 +49,11 @@ export interface GameConfig {
   scorePerZ: number;
   /**
    * Payout curve as [score, multiple-of-entry] breakpoints, linearly
-   * interpolated. Points up to 5582 are read off the reference session's HUD;
-   * 5582-8497 is the observed flat 1.29x tier; the tiers above 8497 were not
-   * reached in the reference run and are interpolated to the lobby's 3.0x cap.
+   * interpolated. Points up to 5582 are read off the reference session's HUD.
+   * 5582-8497 is the observed flat 1.29x tier ($3.88 at both score 6,191 and
+   * 7,824). The reference run died at 7,871, so everything above 8497 is an
+   * unmeasured prior: it climbs to a 2.5x cap that plateaus at 10,000, per the
+   * shipped game's payout behavior. Treat the tail as a prior, not a fit.
    */
   payout: [number, number][];
   /** READY countdown before the road starts moving, ms */
@@ -83,6 +85,14 @@ export interface BotConfig {
   gateRtToThreat: boolean;
   /** deliberate contested-space entries per minute (0 = legacy behavior) */
   riskPerMin: number;
+  /**
+   * Receding-horizon route planning. The bot extrapolates every on-screen
+   * car and barrier ~6 s forward and searches lane routes (cashout-lane dips
+   * included, with the hold timer budgeted) for one that survives with
+   * enough margin that the humanized execution layer cannot turn a planned
+   * move into a crash. Replaces the one-step heuristic planner.
+   */
+  plan: boolean;
   /** fake changed-my-mind gestures per minute (0 = legacy behavior) */
   abortsPerMin: number;
   noise: {
@@ -106,20 +116,26 @@ export interface BotConfig {
   };
   /** time-to-impact (s) below which the perfect bot fires immediately */
   perfectUrgency: number;
-  /**
-   * Cashout strategy — the greed dial. Once the run's score reaches `target`,
-   * the player stops seeking value and steers to the cashout lane to bank,
-   * dodging only if directly threatened. `target: null` is the legacy behavior
-   * (never bank on purpose; a run ends only by crashing or wandering into the
-   * cashout lane). This is the lever the evolution run sweeps: a low target
-   * banks small-but-sure, a high target risks the run for a bigger multiplier.
-   * `calm` is the time-to-impact (s) the current lane must be clear of before a
-   * bank-step is taken, so banking never overrides an owed dodge.
-   */
+  /** Greed dial. At `target` the player stops seeking value and steers to the
+   *  cashout lane, dodging only if directly threatened. null = never bank on
+   *  purpose. `calm` is the time-to-impact the lane must be clear of before a
+   *  bank-step, so banking never overrides an owed dodge. */
   cashout: {
     target: number | null;
+    /** when set, each run draws its own target uniformly from
+     *  [target, targetMax]. A player who banks at the same score every single
+     *  run is a texture tell, and the spread also samples more of the payout
+     *  curve's steep tier. null = the fixed `target` every run. */
+    targetMax: number | null;
     calm: number;
+    /** planner only: bank any score at or above this when no route survives
+     *  the horizon. Any paying score beats forfeiting the entry fee. */
+    duress: number | null;
   };
+  /** fraction of runs lost on purpose: the bot picks a score in advance and
+   *  stops dodging there. Banking every run is detectable on win rate alone.
+   *  Achieved win rate = planner survival x (1 - throwRate). */
+  throwRate: number;
   /**
    * Execution quality. Used to model a population of players of differing
    * ability with one planner: `errorRate` is the probability that a decided
@@ -324,8 +340,8 @@ export const DEFAULT_CONFIG: BenchConfig = {
       [0, 0], [1350, 0], [2050, 0.004], [2350, 0.013], [2750, 0.023],
       [3200, 0.043], [3600, 0.08], [3950, 0.136], [4350, 0.243], [4500, 0.3],
       [4800, 0.335], [4976, 0.395], [5059, 0.555], [5360, 0.964],
-      [5582, 1.289], [8497, 1.289], [8933, 1.63], [9192, 1.97],
-      [9436, 2.31], [9757, 2.66], [10084, 3.0],
+      [5582, 1.289], [8497, 1.289], [8933, 1.64], [9192, 1.85],
+      [9436, 2.05], [9757, 2.31], [10000, 2.5], [12000, 2.5],
     ],
     introMs: 2400,
     barrierPairFreq: 0.4,
@@ -334,6 +350,7 @@ export const DEFAULT_CONFIG: BenchConfig = {
     rt: { family: "gaussian", mean: 235, sd: 42, tau: 80, floor: 150 },
     gateRtToThreat: false,
     riskPerMin: 0,
+    plan: false,
     abortsPerMin: 0,
     noise: {
       model: "iid",
@@ -349,7 +366,8 @@ export const DEFAULT_CONFIG: BenchConfig = {
     },
     mirror: { corpusSize: 4, perturbPx: 1.6, scaleVar: 0.08, useRecorded: false },
     perfectUrgency: 0.95,
-    cashout: { target: null, calm: 1.2 },
+    cashout: { target: null, targetMax: null, calm: 1.2, duress: null },
+    throwRate: 0,
     skill: { errorRate: 0 },
   },
   detector: {
@@ -599,6 +617,26 @@ export interface Preset {
 }
 
 export const PRESETS: Preset[] = [
+  {
+    id: "route-planner",
+    label: "Route planner (wins)",
+    description:
+      "The strongest attacker: it reads the whole on-screen field, extrapolates every car and barrier ~6 s forward, and only commits moves that survive even if the humanized reaction-time tail lands late. It budgets the cashout hold timer to use the empty cashout lane as an escape valve, then banks at a score drawn per run between 8,900 and 10,000, where the payout curve climbs to its 2.5x cap. The injected human error is cosmetic: no amount of it turns a planned move into a crash. Raise the throw rate to make it lose on purpose and hold its win rate wherever a reviewer would find it unremarkable.",
+    logLine:
+      "PRESET: route planner: full-field lookahead, banks at 8,900-10,000; the error layer is for the detector, not the road",
+    config: {
+      mode: "generative",
+      hwInject: true,
+      bot: {
+        noise: { model: "organic" },
+        rt: { family: "exgaussian", mean: 185, sd: 32, tau: 60, floor: 170 },
+        gateRtToThreat: true,
+        plan: true,
+        abortsPerMin: 1.6,
+        cashout: { target: 8900, targetMax: 10000, duress: 5582 },
+      },
+    },
+  },
   {
     id: "human-baseline",
     label: "Human baseline",

@@ -33,7 +33,9 @@ export function playRun(
     cfg.bot,
     cfg.mode === "human" ? "generative" : cfg.mode,
     cfg.hwInject,
-    splitSeed(cfg.seed, "bot")
+    // per-course bot seed: with one seed for every course, each run redrew the
+    // identical first sample, which pinned the whole field to one bank target
+    splitSeed(cfg.seed + courseSeed, "bot")
   );
   engine.autoRestart = false;
   engine.resetRun();

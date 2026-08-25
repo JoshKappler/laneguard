@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { Engine } from "@/lib/sim/engine";
 import { mulberry32, splitSeed } from "@/lib/core/rng";
+import type { BenchConfig } from "@/lib/core/config";
 import { DEFAULT_CONFIG, mergeConfig, PRESETS } from "@/lib/core/config";
 import {
   playRun,
@@ -237,13 +238,15 @@ describe("modeled field", () => {
         },
         4242
       );
+    const N = 600;
     const banked = (z: number) => {
       let n = 0;
-      for (let c = 0; c < 200; c++) if (playRun(cfgFor(z), 5000 + c).banked > 0) n++;
-      return n / 200;
+      for (let c = 0; c < N; c++) if (playRun(cfgFor(z), 5000 + c).banked > 0) n++;
+      return n / N;
     };
-    // averaged over 200 shared courses (banking is rare on the video-fitted
-    // course, so small samples are noise), the strong draw banks more often
+    // the skill gradient is real but small at this bank target (38.5% at the
+    // weakest draw to 42.2% at the strongest, and it saturates above z=-1),
+    // so it needs 600 shared courses to clear the sampling noise
     expect(banked(2)).toBeGreaterThan(banked(-2));
   });
 });
@@ -338,5 +341,55 @@ describe("shipped stealth preset", () => {
     // and it is a winning-but-not-absurd rate, which is the tuning target
     expect(winRate(rec)).toBeGreaterThan(0.5);
     expect(winRate(rec)).toBeLessThan(0.7);
+  });
+});
+
+describe("shipped route planner preset", () => {
+  const preset = () => PRESETS.find((p) => p.id === "route-planner")!;
+
+  // course seeds disjoint from the tuning set, so these are holdouts
+  const holdout = (cfg: BenchConfig, n: number) => {
+    let banked = 0,
+      total = 0;
+    for (let i = 0; i < n; i++) {
+      const r = playRun(cfg, 5_500_000 + i * 977, 400);
+      if (r.banked > 0) {
+        banked++;
+        total += r.banked;
+      }
+    }
+    return { rate: banked / n, net: (total - n * DEFAULT_CONFIG.game.entryFee) / n };
+  };
+
+  test("routing is what earns it: the same kit without it earns far less", () => {
+    const n = 120;
+    const on = holdout(mergeConfig(DEFAULT_CONFIG, { ...preset().config, seed: 4242 }), n);
+    const off = holdout(
+      mergeConfig(DEFAULT_CONFIG, {
+        ...preset().config,
+        seed: 4242,
+        bot: { ...preset().config.bot, plan: false },
+      }),
+      n
+    );
+    // solo play is negative for everyone on the real 2.5x payout curve; the
+    // attacker's edge shows up head-to-head, so the pin is the gap, not a sign
+    expect(on.rate).toBeGreaterThan(0.4);
+    expect(on.net - off.net).toBeGreaterThan(1);
+  });
+
+  test("the throw dial lowers the bank rate on purpose", () => {
+    const n = 80;
+    const base = preset().config.bot!;
+    const kept = holdout(mergeConfig(DEFAULT_CONFIG, { ...preset().config, seed: 4242 }), n);
+    const thrown = holdout(
+      mergeConfig(DEFAULT_CONFIG, {
+        ...preset().config,
+        seed: 4242,
+        bot: { ...base, throwRate: 0.6 },
+      }),
+      n
+    );
+    expect(thrown.rate).toBeLessThan(kept.rate * 0.75);
   });
 });

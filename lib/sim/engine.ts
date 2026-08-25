@@ -410,6 +410,21 @@ export class Engine {
           if (b.z > a.z && b.z - a.z < this.COLL_Z * 1.6 && b.f < a.f) b.f = a.f;
         }
       }
+      // no-wall invariant: drift between waves must not rebuild a 3-wide
+      // block the spawner forbade (the reference never shows one)
+      for (const b of s.cars) {
+        if (b.passed) continue;
+        let fmax = -1;
+        const lanes = new Set<number>();
+        for (const a of s.cars) {
+          if (a === b || a.passed || a.lane === b.lane || a.z > b.z) continue;
+          if (b.z - a.z < 12) {
+            lanes.add(a.lane);
+            if (a.f > fmax) fmax = a.f;
+          }
+        }
+        if (lanes.size >= 2 && b.f < fmax) b.f = fmax;
+      }
       let crashed = false;
       for (const car of s.cars) {
         const cl = this.closing(car);

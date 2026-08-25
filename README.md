@@ -20,7 +20,7 @@ are what actually bind a bot.
 > nothing is invented, and first-principles priors are labeled as priors.
 
 The bench is four tabs on one nav: setup, run, results, writeup. A first visit
-boots a pre-run demo of the stealth camouflage bot (the strongest attacker,
+boots a pre-run demo of the route planner bot (the strongest attacker,
 fast-forwarded 3 sim-minutes) so every panel arrives populated with the
 interesting case, then keeps running live. **Setup**: one run
 panel, driver and anti-cheat side by side, plus a phone that records your real
@@ -56,7 +56,7 @@ log, calibration state, and the server-side economy and cadence panels.
 ```bash
 pnpm install
 pnpm dev          # the bench at http://localhost:3000
-pnpm test         # 86 tests: parity, determinism, attacker behavior, ROC math
+pnpm test         # 88 tests: parity, determinism, attacker behavior, ROC math
 pnpm batch        # regenerate the attacker/economy/cadence tables
 pnpm evo          # head-to-head sweep: win rate from play, not assumption
 pnpm calibrate    # fit thresholds to a human corpus (see below)
@@ -70,7 +70,7 @@ dependencies beyond React/Next and the Luckiest Guy webfont.
 
 ```
 lib/sim/        deterministic game engine (physics) + SAT collision — pure, DOM-free
-lib/attack/     the attacker models (scripted → replay → generative → stealth)
+lib/attack/     the attacker models (scripted, replay, generative, stealth, route planner)
 lib/detect/     feature extraction, the 7 signals + ensemble, ROC calibration
 lib/econ/       economy break-even, skill-matched population, head-to-head
                 match sim (win rates from play), 7-day cadence
@@ -95,8 +95,9 @@ matters.
 |---|---|---|---|---|
 | naive scripted | **BOT 100%** | 0/12 | **12/12** | kinematics (jitter ≈ 0) + event provenance, in seconds |
 | replay farm (injected) | **BOT 100%** | 0/12 | **12/12** | replay similarity: repeats in shape *and* timing (see the corpus-size caveat below) |
-| evasive generative | BOT 50% | 9/12 | **9/12** | organic noise beats motor forensics; the impossible-RT artifact lands in about a minute |
+| evasive generative | BOT 42% | 7/12 | **9/12** | organic noise beats motor forensics; the impossible-RT artifact lands in about a minute |
 | **stealth camouflage** | HUMAN 12/12 | 0/12 | **0/12** | **never touches SUSPECT or BOT** |
+| **route planner** | HUMAN 12/12 | 1/12 | **0/12** | **never reaches BOT; one seed brushed SUSPECT and came back** |
 
 **Corpus-size caveat on the replay row.** That result is measured against the
 synthesized corpus, which `buildCorpus` caps at 8 distinct traces; replay
@@ -107,12 +108,66 @@ not measured here.
 The stealth bot uses organic motor noise (pink 1/f + tremor + drift), ex-Gaussian
 reaction times gated to threat onset, deliberate imperfect play (it enters
 contested space and genuinely crashes for it, and fakes aborted gestures), and a
-human banking discipline (it banks 36% of courses at its 4000 target). Banking
+human banking discipline (it banks 33% of courses at its 4000 target). Banking
 changes two numbers at once: cashing out retires the "never banks a run"
 texture flag, and it made the attacker *better at winning* (head-to-head win
-rate 30.8% → 59.3% against the modeled field on shared courses), because under
+rate 36.5% → 55.9% against the modeled field on shared courses), because under
 the video-fitted payout any banked run beats a forfeit. A competent attacker
 looks **more** normal as it gets stronger, so better play is not itself a tell.
+
+**The route planner is the rung that actually pays.** Every attacker above it
+loses money per run: they dodge one step at a time, so they die a median 26-30 s
+in and forfeit the $3.01 entry. The route planner instead extrapolates every
+on-screen car and barrier about 6 s forward and searches lane routes for one
+that survives with enough margin that its own humanized execution (the
+ex-Gaussian reaction tail, the gesture wander) cannot turn a planned move into
+a crash. The injected human error stays: it is there for the detector, and it
+is no longer load-bearing on the road. Measured on 240 holdout courses (seeds
+disjoint from the ones it was tuned on):
+
+| attacker | banks | avg bank | solo net per run | head-to-head win rate | EV per game |
+|---|---|---|---|---|---|
+| evasive generative | 1.7% | $1.92 | -$2.98 | 36.5% | -$1.25 |
+| stealth camouflage | 33.8% | $0.60 | -$2.81 | 55.9% | -$0.32 |
+| **route planner** | **45.4%** | **$5.65** | **-$0.45** | **66.4%** | **+$0.19** |
+
+Read the last two columns, not the middle one. Solo play loses money for every
+attacker here, and it loses money for the modeled humans too: the payout curve
+pays 1.289x across the whole 5,582 to 8,497 band and only reaches its 2.5x cap
+at 10,000, so a run has to survive almost to the plateau before the $3.01 entry
+comes back. That is a property of the game's economics, not a weakness in the
+attacker.
+
+The mode that pays is the one the game actually runs, a 1v1 pot with a 20%
+rake, where break-even is a 62.5% win rate. Only the route planner clears it,
+at 66.4% over 1,440 shared-course pairings against the modeled field, worth
++$0.19 a game. It does this while reading HUMAN: 0/12 seeds ever reach BOT, and
+one of twelve brushed SUSPECT and came back. That combination, a profitable
+attacker the detector does not catch, is the honest finding this bench exists
+to surface.
+
+The margin is thin, and that is the point of the throw dial. A bot that banks
+every run it can is detectable on win rate alone, whatever its input texture
+looks like, so `throwRate` sets the share of runs it loses on purpose: it picks
+a score in advance and simply stops dodging there, which reads as a missed
+turn. Turning it up buys camouflage with EV, and the trade is steep at this
+margin.
+
+| throw rate | head-to-head win rate | EV per game |
+|---|---|---|
+| 0 (default) | 66.4% | +$0.19 |
+| 0.15 | 65.0% | +$0.12 |
+| 0.30 | 60.2% | -$0.11 |
+
+Two limits worth stating plainly. Survival, not greed, is what caps this: the
+planner banks 45 to 46% of runs, and a 20-configuration sweep over lookahead
+depth (120 to 400 ticks), crossing pads, lane-value margins and the duress
+threshold moved solo net only between -$0.27 and -$1.04. Nothing in that space
+reaches the 4-lane solvability oracle, which survives 180 s on 29 of 30
+courses. The gap between 46% and that ceiling is planner quality, and it is the
+open problem here. Second, the throw dial can only lower the win rate, never
+raise it, so the achieved rate is always the planner's survival rate times
+(1 - throwRate).
 
 Time is the natural counter-argument (more session, more evidence), so run the
 last two rungs to 10 minutes (`pnpm batch --duration 600`):

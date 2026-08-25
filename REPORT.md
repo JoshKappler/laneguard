@@ -96,17 +96,27 @@ balance the moment either fires.
 
 | attacker | verdict at 180 s | ever SUSPECT | ever BOT | mean conf | median t→BOT | jitter | Δ⁴/Δ² | RT floor |
 |---|---|---|---|---|---|---|---|---|
-| naive scripted (T0) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 14 s | 0.00 px | 0.00 | 81 ms |
-| replay farm (T1, injected) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 23 s | 1.82 px | 2.27 | 65 ms |
-| evasive generative (T2+) | BOT 50% | 9/12 | **9/12** | 0.56 | 51 s *(of the 9)* | 1.62 px | 1.76 | 64 ms |
-| **stealth camouflage (T3)** | HUMAN 12/12 | 0/12 | **0/12** | **0.08** | never | 1.62 px | 1.74 | 235 ms |
+| naive scripted (T0) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 12 s | 0.00 px | 0.00 | 125 ms |
+| replay farm (T1, injected) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 19 s | 1.82 px | 2.27 | 61 ms |
+| evasive generative (T2+) | BOT 42% | 7/12 | **9/12** | 0.55 | 63 s *(of the 9)* | 1.64 px | 1.77 | 74 ms |
+| **stealth camouflage (T3)** | HUMAN 12/12 | 0/12 | **0/12** | **0.08** | never | 1.63 px | 1.75 | 239 ms |
+| **route planner (T4)** | HUMAN 12/12 | 1/12 | **0/12** | **0.09** | never | 1.63 px | 1.77 | 236 ms |
 
 The two smoking-gun tiers skip SUSPECT entirely: escalation takes them straight
 to BOT. The evasive bot is the interesting middle: it touches SUSPECT and BOT
-on nine of twelve seeds, and its median 51 s time-to-BOT is a median over the
+on nine of twelve seeds, and its median 63 s time-to-BOT is a median over the
 nine seeds that got there, not over all twelve. Its tell is the RT floor: a
 planner that moves the instant a plan forms gets credited physically impossible
 sub-100 ms "reactions" in dense traffic.
+
+T4 is the rung that changes the economics rather than the forensics. Its
+motor and reaction statistics are indistinguishable from T3's, because it
+inherits the same stealth kit; what it adds is a receding-horizon route search
+(§3a) that cuts its solo loss from $2.81 a run to $0.45, and lifts its
+head-to-head win rate from 55.9% to 66.4%. It is the first attacker in this
+ladder that beats the 62.5% rake break-even, and the detector does not catch
+it: 0/12 seeds ever reach BOT, with one of twelve brushing SUSPECT and
+returning.
 
 The naive bot is caught in seconds by kinematics (machine-clean swipes, jitter
 ≈ 0) and event provenance. The replay farm survives provenance blinding (its
@@ -119,7 +129,7 @@ swipe-level motor-forensics signal by modeling human motor noise correctly:
 | noise model | Δ⁴/Δ² whiteness | caught by motor forensics? |
 |---|---|---|
 | iid Gaussian (naive) | 2.21 | yes — injected noise is spectrally white |
-| pink 1/f + tremor + drift (organic) | 1.76 | **no** — indistinguishable from a band-limited human hand |
+| pink 1/f + tremor + drift (organic) | 1.77 | **no** — indistinguishable from a band-limited human hand |
 
 The evasive bot still trips the **reaction-time floor**: with no RT model, a
 planner fires the instant a plan forms, and in dense traffic that gets credited
@@ -152,8 +162,65 @@ sheet: 0/40 ever-SUSPECT, 0/40 ever-BOT. "Invisible" was never the claim, and
 a 40-seed sheet is finite evidence, not a proof; the precise statement: *the
 detector never gets enough to act on.*
 
+### 3a. The route planner, and why it is the one that pays
+
+Every attacker through T3 is a one-step dodger: it looks at what threatens it
+now and picks a lane that is clear now. That is why they all lose money. They
+survive a median 26 to 30 s, and a forfeited run costs the full $3.01 entry no
+matter how high the score got. T3 disguises a losing player convincingly; it
+does not make the player win.
+
+T4 changes the planner rather than the disguise. Each decision extrapolates
+every on-screen car and barrier about six seconds forward (per-car closing
+speeds, the traffic-coupling rules, the road's speed ramp) and searches
+lane-by-lane routes with dynamic programming, keeping the route that survives
+the horizon and earns the most along it. Three properties make it hold up:
+
+- **Margin sized to its own latency.** A crossing is only taken if the
+  destination stays clear across the whole flight window plus a pad, measured
+  from when the gesture will actually land, not from when the plan was made.
+  The humanized execution layer (the ex-Gaussian reaction tail, the gesture
+  wander) can land anywhere inside that window without turning a planned move
+  into a crash. The injected error is still there, still what the detector
+  measures, and no longer load-bearing on the road.
+- **Value that decays toward danger.** A lane is worth its multiplier only
+  while it stays comfortably clear and keeps a rail-free exit boundary, so
+  routes leave a doomed lane seconds early instead of at the last survivable
+  tick. The 5x lane has one exit, which makes it a sprint lane, not a home.
+- **A deadline hand-off.** If no route survives the horizon and a threat is
+  inside 2.6 s, the one-step dodger executes instead of waiting for a plan
+  that will not come.
+
+On 240 holdout courses (seeds disjoint from those it was tuned on):
+
+| attacker | banks | avg bank | solo net per run | head-to-head win rate | EV per game |
+|---|---|---|---|---|---|
+| evasive generative (T2+) | 1.7% | $1.92 | -$2.98 | 36.5% | -$1.25 |
+| stealth camouflage (T3) | 33.8% | $0.60 | -$2.81 | 55.9% | -$0.32 |
+| **route planner (T4)** | **45.4%** | **$5.65** | **-$0.45** | **66.4%** | **+$0.19** |
+
+Solo play is negative for every rung, and for the modeled humans too. The
+payout curve pays a flat 1.289x from 5,582 to 8,497 and only reaches its 2.5x
+cap at 10,000, so a run must survive nearly to the plateau before the $3.01
+entry comes back. That is the game's economics, not an attacker weakness, and
+it is why the solo column is the wrong one to read.
+
+The paying mode is the 1v1 pot with a 20% rake, where break-even is 62.5%. The
+win rate is over 1,440 shared-course pairings against the modeled field, and
+only T4 clears the bar, at 66.4% and +$0.19 a game. A repo test pins the size
+of the gap routing opens rather than the sign of a solo return, so the claim
+re-derives rather than rots.
+
+Survival, not greed, is the binding constraint. A 20-configuration sweep over
+lookahead depth (120 to 400 ticks), crossing pads, lane-value margins and the
+duress threshold moved solo net only between -$0.27 and -$1.04, leaving the
+bank rate pinned near 46%. The 4-lane solvability oracle survives 180 s on 29
+of 30 courses, so the gap between 46% and that ceiling is planner quality and
+remains the open problem.
+
 That is the ceiling of client-side behavioral detection. What survives it is
-the economics, not a better forensic signal.
+the economics, not a better forensic signal. T4 is the case that shows why: it
+is a *profitable* attacker the detector reads as human.
 
 ---
 

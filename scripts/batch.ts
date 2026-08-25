@@ -28,6 +28,11 @@ const argNum = (flag: string, dflt: number) => {
 };
 const argSeeds = argNum("--seeds", 12);
 const DURATION_S = argNum("--duration", 180);
+// --only <id,id> runs a subset of profiles so a long soak can be sharded
+// across processes (each shard prints its own rows; the tables concatenate)
+const onlyArg = process.argv.indexOf("--only");
+const ONLY = onlyArg >= 0 ? (process.argv[onlyArg + 1] ?? "").split(",") : null;
+const TABLES_ONLY = process.argv.includes("--attackers-only");
 
 interface ProfileAgg {
   id: string;
@@ -125,9 +130,9 @@ const fmt = (x: number | null, d = 2) =>
   x === null || Number.isNaN(x) ? "—" : x.toFixed(d);
 
 // ---- attacker profiles ----
-const profiles = PRESETS.filter((p) => p.id !== "phone-farm-scale").map((p) =>
-  runProfile(p.id, p.label, p.config, DURATION_S)
-);
+const profiles = PRESETS.filter(
+  (p) => p.id !== "phone-farm-scale" && (!ONLY || ONLY.includes(p.id))
+).map((p) => runProfile(p.id, p.label, p.config, DURATION_S));
 
 /*
  * Two different questions, reported separately because they give different
@@ -220,5 +225,11 @@ const summary = {
     sched: { n: cad.sched.n, cv: cad.sched.cv, activeHours: cad.sched.activeHours, longestIdle: cad.sched.longestIdle },
   },
 };
-writeFileSync(path.join(outDir, "summary.json"), JSON.stringify(summary, null, 2));
-console.log(`\nwrote results/summary.json`);
+// a shard holds only some profiles, so it must never overwrite the canonical
+// summary a full run produces
+if (TABLES_ONLY) {
+  console.log(`\n(shard: ${ONLY?.join(",") ?? "all"}, summary.json not written)`);
+} else {
+  writeFileSync(path.join(outDir, "summary.json"), JSON.stringify(summary, null, 2));
+  console.log(`\nwrote results/summary.json`);
+}
