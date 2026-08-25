@@ -29,7 +29,7 @@ export interface Barrier {
   z1: number;
 }
 
-export type Phase = "idle" | "running" | "dead" | "cashed";
+export type Phase = "idle" | "countdown" | "running" | "dead" | "cashed";
 
 export interface TelemetryEvent {
   t: number;
@@ -70,7 +70,7 @@ export interface EngineState {
   dist: number;
   score: number;
   deaths: number;
-  lastOpen: number;
+  gapJit: number;
   waveGap: number;
   zSinceWave: number;
   stateAt: number;
@@ -79,7 +79,7 @@ export interface EngineState {
   bankedTotal: number;
 }
 
-const CAR_COLOR_COUNT = 4;
+const CAR_COLOR_COUNT = 7;
 
 export class Engine {
   cfg: GameConfig;
@@ -116,7 +116,7 @@ export class Engine {
       dist: 0,
       score: 0,
       deaths: 0,
-      lastOpen: 1,
+      gapJit: 1,
       waveGap: cfg.waveGapStart,
       zSinceWave: 0,
       stateAt: 0,
@@ -127,8 +127,18 @@ export class Engine {
     this.input = new InputPipeline(this);
   }
 
+  /** payout as a multiple of the entry fee, from the video-fitted curve */
   multiplier(): number {
-    return Math.min(this.cfg.multCap, 1 + this.state.score * this.cfg.multRate);
+    const t = this.cfg.payout,
+      s = this.state.score;
+    if (s <= t[0][0]) return t[0][1];
+    for (let i = 1; i < t.length; i++) {
+      if (s <= t[i][0]) {
+        const [s0, m0] = t[i - 1], [s1, m1] = t[i];
+        return m0 + ((s - s0) / (s1 - s0)) * (m1 - m0);
+      }
+    }
+    return t[t.length - 1][1];
   }
 
   closing(car: Car): number {
@@ -152,7 +162,7 @@ export class Engine {
     s.lane = 1;
     s.x = 1;
     s.theta = 0;
-    s.lastOpen = 1;
+    s.gapJit = 1;
     s.speed = cfg.baseSpeed;
     s.waveGap = cfg.waveGapStart;
     s.runT = 0;
@@ -161,56 +171,76 @@ export class Engine {
     s.dist = 0;
     s.score = 0;
     s.cashTimer = 0;
-    s.phase = "running";
+    s.phase = this.cfg.introMs > 0 ? "countdown" : "running";
     s.stateAt = this.now;
+    // the reference READY screen already shows frozen traffic up the road
+    for (let z = cfg.spawnZ - 6; z > 45; z -= s.waveGap * (0.45 + this.rng() * 1.75))
+      this.spawnWave(z);
     return [this.ev("runStart", "info", "run started")];
   }
 
-  private spawnWave() {
+  private spawnWave(zAt = this.cfg.spawnZ) {
     const s = this.state,
       cfg = this.cfg,
       rng = this.rng;
-    const trafficLanes = this.laneCount - 1;
-    // The open traffic lane walks by at most one step, so a correct dodge is
-    // always reachable. The cashout lane gets its own occasional traffic.
-    const r = rng();
-    let open = s.lastOpen;
-    if (r < 0.38) open = Math.max(0, open - 1);
-    else if (r < 0.76) open = Math.min(trafficLanes - 1, open + 1);
-    const needCross = open !== s.lastOpen ? Math.min(open, s.lastOpen) : -1;
-    s.lastOpen = open;
-
-    // each wave drives at its own forward speed (fraction of the player's)
-    const fWave = 0.12 + rng() * 0.12;
+    // Reference wave mix: ~90% one car, ~10% a two-lane pair, never a wall,
+    // with traffic weighted toward the high-multiplier lanes and driving at
+    // roughly half road speed. Difficulty comes from the speed ramp.
+    const fWave = 0.46 + rng() * 0.18;
     const mkCar = (lane: number): Car => ({
       lane,
-      z: cfg.spawnZ + (rng() - 0.5) * 3,
-      f: Math.max(0.08, Math.min(0.3, fWave + (rng() - 0.5) * 0.04)),
+      z: zAt + (rng() - 0.5) * 3,
+      f: Math.max(0.4, Math.min(0.78, fWave + (rng() - 0.5) * 0.06)),
       col: (rng() * CAR_COLOR_COUNT) | 0,
       threatAt: 0,
       rtLogged: false,
       passed: false,
     });
-    for (let l = 0; l < trafficLanes; l++) {
-      if (l === open) continue;
-      if (rng() < s.density) s.cars.push(mkCar(l));
-    }
-    if (rng() < cfg.cashTrafficFreq) s.cars.push(mkCar(this.cashLane));
+    const pick = (excl: number) => {
+      let tot = 0;
+      for (let l = 0; l < this.laneCount; l++)
+        if (l !== excl) tot += cfg.laneMult[l] + 0.35;
+      let r = rng() * tot;
+      for (let l = 0; l < this.laneCount; l++) {
+        if (l === excl) continue;
+        r -= cfg.laneMult[l] + 0.35;
+        if (r <= 0) return l;
+      }
+      return this.laneCount - 1;
+    };
+    if (rng() < s.density) {
+      // bunched waves land close in z; cap the distinct lanes blocked inside
+      // a car-length window so bunching never assembles an undodgeable wall
+      const bunched = new Set<number>();
+      for (const c of s.cars)
+        if (c.z > zAt - 10) bunched.add(c.lane);
+      let first = pick(-1);
+      if (bunched.size >= 2 && !bunched.has(first))
+        first = [...bunched][(rng() * bunched.size) | 0];
+      s.cars.push(mkCar(first));
+      if (rng() < cfg.pairFreq && bunched.size < 2) s.cars.push(mkCar(pick(first)));
 
-    // Barrier trap: red blocks on a lane boundary, never on the boundary the
-    // guaranteed path needs to cross for this wave, and never on the cashout
-    // boundary (the shipped game keeps the cashout lane reachable).
-    if (rng() < cfg.barrierFreq) {
-      const options: number[] = [];
-      for (let b = 0; b < trafficLanes - 1; b++) if (b !== needCross) options.push(b);
-      const b = options[(rng() * options.length) | 0];
-      const len = 5 + rng() * 4;
-      s.barriers.push({
-        boundary: b,
-        z0: cfg.spawnZ - s.waveGap * 0.55,
-        z1: cfg.spawnZ - s.waveGap * 0.55 + len,
-      });
+      // Barrier trap on a lane boundary, never on the spawned car's escape
+      // boundaries and never on the cashout boundary, so a dodge always exists.
+      if (rng() < cfg.barrierFreq) {
+        const options: number[] = [];
+        for (let b = 0; b < this.laneCount - 2; b++)
+          if (b !== first - 1 && b !== first) options.push(b);
+        if (options.length) {
+          const pickB = (rng() * options.length) | 0;
+          const len = 6 + rng() * 14;
+          const z0 = zAt - s.waveGap * 0.55;
+          s.barriers.push({ boundary: options[pickB], z0, z1: z0 + len });
+          // the reference run shows flanking pairs on adjacent boundaries
+          if (options.length > 1 && rng() < cfg.barrierPairFreq) {
+            const other = options[(pickB + 1) % options.length];
+            s.barriers.push({ boundary: other, z0, z1: z0 + 6 + rng() * 8 });
+          }
+        }
+      }
     }
+    // measured inter-wave spacing is ragged: p10 ≈ 0.45x, p90 ≈ 2.2x median
+    s.gapJit = 0.45 + rng() * 1.75;
   }
 
   barrierBlocks(fromLane: number, toLane: number, zLead: number): boolean {
@@ -273,12 +303,12 @@ export class Engine {
     s.phase = "dead";
     s.stateAt = this.now;
     s.deaths++;
-    const forfeited = this.cfg.entryFee * this.multiplier();
+    const forfeited = this.cfg.entryFee;
     return [
       this.ev("death", "flag", "", {}),
       this.ev("runEnd", "flag", "", {
         endKind: "crash",
-        score: s.score,
+        score: Math.floor(s.score),
         banked: 0,
         forfeited,
         mult: this.multiplier(),
@@ -304,7 +334,9 @@ export class Engine {
       const dz = s.speed * dt;
       s.dist += dz;
       s.zSinceWave += dz;
-      if (s.zSinceWave >= s.waveGap) {
+      // score accrues with distance, scaled by the committed lane's multiplier
+      s.score += dz * cfg.laneMult[s.lane] * cfg.scorePerZ;
+      if (s.zSinceWave >= s.waveGap * s.gapJit) {
         s.zSinceWave = 0;
         this.spawnWave();
       }
@@ -344,10 +376,8 @@ export class Engine {
         }
         if (!car.passed && car.z < -this.COLL_Z) {
           car.passed = true;
-          // score is multiplied by the lane you were in when you passed
           const mult = cfg.laneMult[s.lane];
-          s.score += mult;
-          out.push(this.ev("pass", "info", "", { mult, score: s.score }));
+          out.push(this.ev("pass", "info", "", { mult, score: Math.floor(s.score) }));
         }
         if (
           !crashed &&
@@ -384,7 +414,7 @@ export class Engine {
               s.theta,
               (bar.boundary + 0.5) * cfg.lanePx,
               ((bar.z0 + bar.z1) / 2) * cfg.zPx,
-              4,
+              3,
               ((bar.z1 - bar.z0) / 2) * cfg.zPx,
               cfg.hitHalfWidth,
               cfg.hitHalfLength,
@@ -412,7 +442,7 @@ export class Engine {
             out.push(
               this.ev("runEnd", "good", "", {
                 endKind: "cashout",
-                score: s.score,
+                score: Math.floor(s.score),
                 banked: s.banked,
                 mult: this.multiplier(),
               })
@@ -421,6 +451,11 @@ export class Engine {
         } else {
           s.cashTimer = Math.max(0, s.cashTimer - dt * 2);
         }
+      }
+    } else if (s.phase === "countdown") {
+      if (this.now - s.stateAt >= this.cfg.introMs) {
+        s.phase = "running";
+        s.stateAt = this.now;
       }
     } else if (
       (s.phase === "dead" || s.phase === "cashed") &&

@@ -83,9 +83,11 @@ export default function Writeup() {
         are what actually bind a bot.
       </P>
       <Note>
-        <strong>Scope.</strong> The game here is an <em>original simulation</em>, built by
-        eye from screenshots of the shipped &ldquo;Drive&rdquo; game taken on my own phone plus
-        Triumph&apos;s public marketing and App Store images.
+        <strong>Scope.</strong> The game here is an <em>original simulation</em>, frame-fitted
+        to a screen recording of one full session of the shipped &ldquo;Drive&rdquo; game played
+        on my own phone, plus my own screenshots and Triumph&apos;s public marketing and App Store
+        images: projection, speed ramp, traffic mix, lane-change dynamics, scoring, and the dollar
+        payout curve are measured, not guessed.
         Nothing in this project reverse-engineers, decompiles, inspects, or runs against Triumph&apos;s
         real app or servers, and nothing here is usable as a cheat against it. Every number below is
         produced by code in this repo that actually ran (<span className="mono">pnpm batch</span>).
@@ -140,11 +142,13 @@ export default function Writeup() {
           ))}
         </div>
         <figcaption style={{ ...serif, fontSize: 14, color: "var(--ink-2)", marginTop: 14, maxWidth: "70ch" }}>
-          The simulation is built from the screenshots on the left of each pair, matched by
-          deliberate observation: the rainbow lane, the rotated green CASHOUT lettering,
-          cartoon cars with a consistent light source, and the HUD. It models the visual and physical
-          feel that makes the behavioral signals meaningful. It is not a clone of the product and had
-          no access to one. Full provenance in <span className="mono">references/MANIFEST.md</span>.
+          The simulation is fitted to my own captures of the shipped game (left of each pair): the
+          rainbow lane, the rotated green CASHOUT lettering, cartoon cars with a consistent light
+          source, the HUD, and, from a frame-by-frame pass over a full recorded session, the speed
+          ramp, traffic behavior, lane-change dynamics, scoring rate, and payout curve. It models
+          the visual and physical feel that makes the behavioral signals meaningful. It is not a
+          clone of the product and had no access to one. Full provenance in{" "}
+          <span className="mono">references/MANIFEST.md</span>.
         </figcaption>
       </figure>
 
@@ -161,16 +165,16 @@ export default function Writeup() {
       <Table
         head={["attacker", "verdict @180s", "ever SUSP", "ever BOT", "conf", "t→BOT", "jitter", "Δ⁴/Δ²", "RT floor"]}
         rows={[
-          ["naive scripted", "BOT 100%", "0/12", "12/12", "0.75", "28 s", "0.00", "0.00", "129 ms"],
-          ["replay farm (injected)", "BOT 100%", "0/12", "12/12", "0.75", "50 s", "1.82", "2.28", "217 ms"],
-          ["evasive generative", "BOT 8%", "11/12", "2/12", "0.34", "130 s *", "1.63", "1.76", "215 ms"],
-          ["stealth camouflage", "HUMAN 12/12", "0/12", "0/12", "0.06", "never", "1.64", "1.74", "250 ms"],
+          ["naive scripted", "BOT 100%", "0/12", "12/12", "0.75", "15 s", "0.00", "0.00", "119 ms"],
+          ["replay farm (injected)", "BOT 100%", "1/12", "12/12", "0.75", "23 s", "1.81", "2.28", "50 ms"],
+          ["evasive generative", "BOT 8%", "11/12", "8/12", "0.51", "57 s *", "1.63", "1.76", "54 ms"],
+          ["stealth camouflage", "HUMAN 12/12", "0/12", "0/12", "0.06", "never", "1.62", "1.75", "231 ms"],
         ]}
         hot={(r, c) => r === 3 && c === 3}
       />
       <P dim>
-        * median over the two seeds that reached BOT at all, not over all twelve. The evasive bot
-        <em> ends</em> the session called BOT on 8% of seeds but touches BOT on 17% and SUSPECT on
+        * median over the eight seeds that reached BOT at all, not over all twelve. The evasive bot
+        <em> ends</em> the session called BOT on 8% of seeds but touches BOT on 67% and SUSPECT on
         92%. Reading the final verdict alone understates the detector.
       </P>
       <P>
@@ -187,11 +191,12 @@ export default function Writeup() {
         hot={(r, c) => r === 1 && c === 2}
       />
       <P>
-        The evasive bot still trips <em>behavior texture</em> over a few minutes, because it never
-        enters contested space and lookahead-verified play eventually shows. The stealth rung closes
-        that gap: it enters contested space on purpose and sometimes genuinely crashes for it, fakes
-        aborted gestures, and gates its reaction times to threat onset with an ex-Gaussian sampler
-        that has a real lapse tail.
+        The evasive bot still trips the <em>reaction-time floor</em>: with no RT model, a planner
+        fires the instant a plan forms, and in dense traffic that gets credited sub-100&nbsp;ms
+        &ldquo;reactions&rdquo; no human hand produces. The stealth rung closes that gap: it gates
+        its reaction times to threat onset with an ex-Gaussian sampler that has a real lapse tail,
+        enters contested space on purpose and sometimes genuinely crashes for it, and fakes
+        aborted gestures.
       </P>
       <P>
         Three minutes is not long enough to separate those two attackers, so run both out to{" "}
@@ -200,26 +205,24 @@ export default function Writeup() {
       <Table
         head={["attacker", "verdict @600s", "ever SUSP", "ever BOT", "conf", "t→BOT"]}
         rows={[
-          ["evasive generative", "BOT 83%", "11/12", "10/12", "0.55", "319 s"],
-          ["stealth camouflage", "HUMAN 12/12", "0/12", "0/12", "0.05", "never"],
+          ["evasive generative", "SUSPECT 100%", "12/12", "9/12", "0.50", "57 s"],
+          ["stealth camouflage", "HUMAN 12/12", "0/12", "0/12", "0.06", "never"],
         ]}
         hot={(r, c) => r === 1 && c === 3}
       />
       <P>
-        This is the result worth reading. Given enough time the detector <em>does</em> win against
-        the evasive bot: 2/12 seeds at three minutes becomes 10/12 at ten, because behavior texture
-        accumulates. The stealth rung breaks that trend. It sits at 0/12 however long the session
-        runs, and its confidence <em>falls</em> from 0.06 at three minutes to 0.05 at ten, because
-        the session-level signals need volume and this attacker supplies human-shaped volume. Below
-        T3, time is the defender&apos;s ally; at T3 it changes sides.
+        This is the result worth reading. The detector gets the evasive bot fast (a median 57&nbsp;s
+        to the first BOT touch) and never lets go: every seed sits pinned at SUSPECT for as long as
+        the session runs, because the impossible-RT artifact keeps recurring. The stealth rung
+        breaks that trend. It sits at 0/12 however long the session runs, with confidence flat at
+        0.06, because the session-level signals need volume and this attacker supplies human-shaped
+        volume. Below T3, time is the defender&apos;s ally; at T3 it stops helping.
       </P>
       <P>
-        It can still transiently trip the SUSPECT review tier (2 of 40 seeds in a wider sweep)
-        before falling back. &ldquo;Invisible&rdquo; is too strong. The detector never gets enough
-        to act on, and it occasionally gets just enough to ask a human to look. The one residual grip is a single signal: on the seeds that flagged, it was
-        &ldquo;never enters contested space&rdquo;, meaning the bot&apos;s deliberate risk rate of
-        0.7/min was sometimes short of the detector&apos;s window. An attacker who noticed would
-        raise it and pay a few more crashes. That is the ceiling of client-side behavioral detection.
+        On the wider 40-seed sweep the stealth attacker never so much as grazes SUSPECT.
+        &ldquo;Invisible&rdquo; is still too strong a word for a claim built on 40 seeds; the
+        precise statement is that the client-side detector never gets enough to act on. That is
+        the ceiling of client-side behavioral detection.
       </P>
 
       <H n="03">The seven signals</H>
@@ -288,6 +291,14 @@ export default function Writeup() {
         spawn stream against a passive one frame by frame, and it is what lets one run per
         (player, course) yield every pairwise result.
       </P>
+      <Note>
+        The sweep numbers in this section were measured against the simulator as it stood on
+        2026-08-21. On 2026-08-24 the physics, traffic, scoring, and payout curve were re-fitted
+        frame-by-frame to a recorded session of the shipped game, and this 1.2M-run sweep has not
+        yet been re-run against the re-fitted build. The structural findings (tie rule, scoring
+        rule, field quality) are properties of the match rules, not of those constants; the exact
+        percentages will move.
+      </Note>
       <P>
         Three things had to be swept rather than picked, because each alone can decide the answer: how
         competent the field is, whether a crashed run still scores (a head-to-head pot you must bank to
@@ -347,10 +358,12 @@ export default function Writeup() {
       <P>
         <strong>The attacker&apos;s profit is the field&apos;s mistakes, not a defeated detector.</strong>{" "}
         Every profitable-and-hidden row above is against a field that plays badly or plays the wrong
-        strategy for its rule. The modeled fields&apos; own best-performing greed level is bank@30-50
-        where the attacker&apos;s optimum is bank@12-30; that gap <em>is</em> the edge. Anything that
-        teaches players to bank better narrows the exploitable margin, an unusual anti-cheat lever
-        and a cheaper one than a detector.
+        strategy for its rule. Under the payout curve read off the recorded session the mechanism is
+        sharper still: the curve pays $0 below a score cliff and a solo player only breaks even far
+        above it, but head-to-head any banked run beats a forfeit, so the attacker&apos;s optimum is
+        to bank just past the cliff while human instinct chases break-even. That gap <em>is</em> the
+        edge. Anything that teaches players to bank better narrows the exploitable margin, an unusual
+        anti-cheat lever and a cheaper one than a detector.
       </P>
       <P>
         So the claim survives only conditionally: there
@@ -397,13 +410,12 @@ export default function Writeup() {
         fingerprinting are described, not built.
       </P>
       <P>
-        Two more worth stating plainly. <strong>&ldquo;Never actioned&rdquo; is not &ldquo;never
-        noticed&rdquo;</strong>: the stealth attacker still transiently trips the SUSPECT review tier
-        (2 of 40 seeds in a wider sweep), so a defender who staffs a review queue rather than only
-        auto-banning at the BOT tier recovers some signal from exactly those sessions. That is a
-        narrow but real foothold. And every attacker number on this page is measured over 180 or
-        600&nbsp;s of a <em>single account</em>; nothing here models an adversary who tunes against
-        the detector over weeks, which a real one would.
+        Two more worth stating plainly. <strong>The stealth clean sheet is 40 seeds wide, not
+        infinite</strong>: 0 of 40 seeds ever touch SUSPECT on the video-fitted build (the pre-refit
+        build grazed 2 of 40), which bounds the false-negative rate rather than proving invisibility
+        against a review queue fed by more traffic. And every attacker number on this page is
+        measured over 180 or 600&nbsp;s of a <em>single account</em>; nothing here models an
+        adversary who tunes against the detector over weeks, which a real one would.
       </P>
 
       </article>

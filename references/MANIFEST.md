@@ -232,6 +232,31 @@ though it's absent from the thumbnail — not verified by us):
 
 ---
 
+## 5. Gameplay screen recording (source: user's own device, NOT in this repo)
+
+On **2026-08-24** the user recorded one full Drive session on their own iPhone
+(`ScreenRecording_08-24-2026 17-41-00_1.MP4`, 1206x2622, ~59.17 fps variable,
+67.7 s: lobby, one $3.01-entry run to a crash at score 7,871). The file stays on
+the user's machine and is deliberately not committed (it contains a personal
+notification overlay partway through). Every motion, scoring, and layout constant
+in the simulator was re-fitted frame-by-frame against it:
+
+- projection (vanishing point, depth constant, lane pitch) and the ground-plane
+  zoom-out that tracks road speed while car sprites keep constant pixel width
+- road speed ramp (~50 + 0.9/s), lane-change S-curve and the camera's
+  underdamped spring, wave spacing/mix, per-lane traffic weights, traffic
+  forward speed (~half road speed), barrier placement
+- continuous lane-scaled scoring (0.52 per z in a 1x lane) and the dollar payout
+  curve read off the HUD point by point, break-even ~5,430, flat 1.29x tier at
+  5,582, lobby tiers to 3.0x
+- HUD geometry (dollar/score/badge sizes and baselines, slashed zeros, the READY
+  1X placeholder), READY/GO sequence timing, and the crash screen roll-down
+
+The fitted values live in `lib/core/config.ts` (game physics/payout) and
+`lib/ui/renderer.ts` (projection and drawing constants).
+
+---
+
 ## Summary of files in this directory
 
 | File | Origin |

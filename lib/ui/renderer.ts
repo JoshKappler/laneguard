@@ -1,38 +1,35 @@
 /*
  * Canvas renderer for the game, a pure function of Engine state plus a small
  * view-effects bag (particles, tilt). Rendering never touches physics.
- *
- * Projection is fitted to references/triumph-drive-gameplay-hires.png: the
- * three dashed boundaries and the green line converge on a vanishing point
- * 0.168 frame-heights above the top edge, one lane of lateral offset climbs
- * 0.221 screen-px sideways per px down, and dash spacing is periodic in 1/proj
- * (period 0.1825*D0). The camera tracks the player's lateral position, which
- * the crash-frame reference confirms (its green line slopes the other way).
+ * All geometry constants are frame-tracked from a 60 fps device capture of
+ * the shipped game (2026-08-24): the ground plane zooms out with road speed
+ * while car sprites keep a constant on-screen width, and the camera follows
+ * the player laterally through an underdamped spring.
  */
 import type { Engine, Car, Barrier } from "@/lib/sim/engine";
 import { hitboxShrink } from "@/lib/sim/collision";
 
 const FONT = "'Luckiest Guy', 'IBM Plex Sans', 'Arial Black', sans-serif";
 
-// proj(z) = D0/(D0+z); screenY = YH + (AMP - h*PXPM) * proj.
-const YH = -144; // vanishing point, above the frame
-const AMP = 774; // player row sits at YH + AMP
-const D0 = 12; // z=55 spawns just past the frame top
-const LANE_W = 171; // px per lane at the player row
-const PXPM = LANE_W / 3.5;
-const Z_FAR = 62;
-const Z0 = -6;
+// proj(z) = D0/(D0 + z*zoom); screenY = YH + (AMP - h*px-per-metre) * proj.
+const YH = -148; // vanishing point, above the frame
+const AMP = 778; // player row sits at YH + AMP
+const D0 = 45;
+const LANE_W0 = 174.5; // px per lane at the player row, at base speed
+const ZOOM_K = 0.00564; // ground-plane zoom-out per unit of speed over base
+const Z_FAR = 130;
+const Z0 = -7;
 
-const CAR_HALF_W = 0.214; // lane units; the reference car is 0.43 lanes wide
-const CAR_HALF_L = 1.175; // z units
+const CAR_W_PX = 87; // constant on-screen car width at the player row
+const CAR_HALF_L = 3.42; // world z units
 const CAR_H = 0.5; // metres
 const CAR_TAPER = 0.78; // nose width as a fraction of body width
 
-const ROAD_L = -0.5, ROAD_R = 3.5;
+const ROAD_L = -0.5, ROAD_R = 4.15;
 const RAIL_W = 0.09, RAIL_H = 0.87;
-const DASH_PERIOD = 2.19, DASH_LEN = 1.07, DASH_HW = 0.016;
-const GREEN_L = 2.568, GREEN_R = 2.602;
-const RAINBOW_R = 0.43; // right edge of the rainbow lane surface
+const DASH_PERIOD = 8.4, DASH_LEN = 4.0, DASH_HW = 0.016;
+// the neon cashout edge runs slightly diagonal: nearer the player at low z
+const GREEN_LAT0 = 2.76, GREEN_SLOPE = -0.006, GREEN_HW = 0.017;
 
 const BAR_HALF_W = 0.068, BAR_HALF_L = 0.9, BAR_H = 1.0, BAR_PERIOD = 8.8;
 
@@ -40,8 +37,13 @@ const ASPHALT = "#736d6c";
 const GROUND = "#bdaf83";
 const GREEN = "#0edb0c";
 
-// road-space texture for the flat CASHOUT lettering; em measured at 0.70 lanes
-const CASH = { word: "CASHOUT", slot: 1.26, period: 18.1, latHalf: 0.48, texW: 200, texH: 640, em: 120 };
+// camera spring fitted to the capture's lane-change trajectories
+const CAM_OMEGA = 14, CAM_ZETA = 0.5;
+
+const GOLD = { body: "#cda21a", dark: "#8a6c09", roof: "#ecc746", glass: "#0b0c10" };
+
+// road-space texture for the flat CASHOUT lettering
+const CASH = { word: "CASHOUT", slot: 4.6, period: 62, latHalf: 0.48, latC: 3.38, texW: 200, texH: 640, em: 158 };
 
 export interface Particle {
   x: number; y: number; vx: number; vy: number;
@@ -65,7 +67,10 @@ const CAR_COLORS: CarCol[] = [
   { body: "#d8d8dc", dark: "#9fa0a8", roof: "#ecedf2", glass: "#221d4e" },
   { body: "#f05a10", dark: "#b83f06", roof: "#ff8b3c", glass: "#221d4e" },
   { body: "#b13ee0", dark: "#7f28a8", roof: "#cf72f2", glass: "#221d4e" },
-  { body: "#d02818", dark: "#9a1a0e", roof: "#e85a48", glass: "#221d4e" },
+  { body: "#e8c811", dark: "#a68d08", roof: "#f7dd4a", glass: "#221d4e" },
+  { body: "#23252b", dark: "#131418", roof: "#3c3f47", glass: "#15161a" },
+  { body: "#4fc22f", dark: "#2f8a18", roof: "#7ada5e", glass: "#221d4e" },
+  { body: "#8a5a2e", dark: "#5e3b1a", roof: "#a97946", glass: "#221d4e" },
 ];
 const PLAYER_COLOR: CarCol = { body: "#37c1ff", dark: "#1585c8", roof: "#76dbff", glass: "#0b0c10" };
 
@@ -87,11 +92,20 @@ export class Renderer {
   private playerScreenY = YH + AMP;
   private cashTex: HTMLCanvasElement | null = null;
   private cashTexReal = false;
+  private camX = 1;
+  private camV = 0;
+  private gold = 0;
+  private sparkAcc = 0;
+  private zm = 1;
+  private lw = LANE_W0;
+  private nowMs = 0;
+  private lastPhase = "";
 
   constructor(ctx: CanvasRenderingContext2D, e: Engine, fx: ViewFx) {
     this.ctx = ctx;
     this.e = e;
     this.fx = fx;
+    this.camX = e.state.x;
   }
 
   private rand() {
@@ -102,13 +116,13 @@ export class Renderer {
   }
 
   private proj(z: number) {
-    return D0 / (D0 + Math.max(z, -D0 * 0.7));
+    return D0 / (D0 + Math.max(z * this.zm, -D0 * 0.7));
   }
   private sy(z: number, hM = 0) {
-    return YH + (AMP - hM * PXPM) * this.proj(z);
+    return YH + (AMP - hM * (this.lw / 3.5)) * this.proj(z);
   }
   private sx(lat: number, p: number) {
-    return this.W / 2 + (lat - this.e.state.x) * LANE_W * p;
+    return this.W / 2 + (lat - this.camX) * this.lw * p;
   }
   private pt(lat: number, z: number, hM = 0): Pt {
     return { x: this.sx(lat, this.proj(z)), y: this.sy(z, hM) };
@@ -130,6 +144,31 @@ export class Renderer {
     for (let i = 0; i < 14; i++) this.emitPuff("smoke");
     for (let i = 0; i < 8; i++) this.emitPuff("ember");
     for (let i = 0; i < 8; i++) this.emitPuff("fire");
+  }
+
+  /** the reference READY: chunky gray letters, white rim, playful tilts */
+  private readyWord() {
+    const g = this.ctx;
+    const size = 46;
+    g.font = size + "px " + FONT;
+    const rots = [-0.07, 0.05, -0.03, 0.06, -0.08];
+    const dys = [2, -2, 1, -3, 3];
+    const word = "READY";
+    const widths = [...word].map((ch) => g.measureText(ch).width);
+    const total = widths.reduce((a, b) => a + b, 0) + (word.length - 1) * 2;
+    let x = this.W / 2 - total / 2;
+    for (let i = 0; i < word.length; i++) {
+      g.save();
+      g.translate(x + widths[i] / 2, 445 + dys[i]);
+      g.rotate(rots[i]);
+      g.fillStyle = "rgba(45,45,45,0.35)";
+      g.font = size + "px " + FONT;
+      g.textAlign = "center";
+      g.fillText(word[i], 2, 3);
+      this.otext(word[i], 0, 0, size, "#ababab", "#f2f2f2", 5);
+      g.restore();
+      x += widths[i] + 2;
+    }
   }
 
   private otext(txt: string, x: number, y: number, size: number, fill: string, stroke?: string, strokeW?: number, align?: CanvasTextAlign) {
@@ -158,9 +197,35 @@ export class Renderer {
   }
 
   draw(now: number, dt: number) {
-    void now;
     const g = this.ctx,
       s = this.e.state;
+    this.nowMs = now;
+    // a fresh run starts visually clean: no smoke from the last crash
+    if (s.phase !== this.lastPhase && s.phase === "countdown") this.fx.particles.length = 0;
+    this.lastPhase = s.phase;
+    // ground-plane zoom, spring camera and the gold rainbow-lane skin all
+    // follow engine state at frame rate
+    this.zm = 1 / (1 + ZOOM_K * Math.max(0, s.speed - this.e.cfg.baseSpeed));
+    this.lw = LANE_W0 * this.zm;
+    if (s.phase === "running") {
+      const cdt = Math.min(dt, 0.05);
+      this.camV += (CAM_OMEGA * CAM_OMEGA * (s.x - this.camX) - 2 * CAM_ZETA * CAM_OMEGA * this.camV) * cdt;
+      this.camX += this.camV * cdt;
+    } else {
+      this.camX = s.x;
+      this.camV = 0;
+    }
+    this.gold += ((s.phase === "running" && Math.abs(s.x) < 0.5 ? 1 : 0) - this.gold) * Math.min(1, dt * 5);
+    if (s.phase === "running" && this.gold > 0.6) {
+      this.sparkAcc += dt;
+      while (this.sparkAcc > 0.05) {
+        this.sparkAcc -= 0.05;
+        const lat = (this.rand() - 0.5) * 0.8;
+        const z = -1.2 - this.rand() * 3.2;
+        const at = this.pt(lat, z);
+        this.fx.particles.push({ x: at.x, y: at.y, vx: 0, vy: s.speed * 7 * this.zm, r: 5 + this.rand() * 8, grow: 0, age: -this.rand() * 0.1, life: 0.6, kind: "spark" });
+      }
+    }
     g.save();
     g.clearRect(0, 0, this.W, this.H);
 
@@ -218,11 +283,26 @@ export class Renderer {
       g.fillStyle = "rgba(10,10,14,0.52)";
       g.fillRect(0, 0, this.W, this.H);
       this.drawStartScreen();
+    } else if (s.phase === "countdown") {
+      this.drawHUD();
+      this.readyWord();
     } else if (s.phase === "dead") {
-      g.fillStyle = "rgba(10,10,14,0.35)";
-      g.fillRect(0, 0, this.W, this.H);
-      this.otext("CRASHED", this.W / 2, 180, 72, "#ffffff", "#1c1c1c", 12);
-      this.otext("TAP TO CONTINUE", this.W / 2, this.H - 70, 36, "#ffffff", "#1c1c1c", 8);
+      // the reference crash: numbers roll down and fade for ~1.6 s, then the
+      // CRASHED screen lands at ~2 s
+      const tRel = this.e.now - s.stateAt;
+      if (tRel < 1600) {
+        const f = 1 - tRel / 1600;
+        g.save();
+        g.globalAlpha = 0.25 + 0.75 * f;
+        this.drawHUD(f);
+        g.restore();
+      }
+      if (tRel > 1900) {
+        g.fillStyle = "rgba(10,10,14,0.35)";
+        g.fillRect(0, 0, this.W, this.H);
+        this.otext("CRASHED", this.W / 2, 152, 72, "#ffffff", "#1c1c1c", 12);
+        this.otext("TAP TO CONTINUE", this.W / 2, this.H - 70, 36, "#ffffff", "#1c1c1c", 8);
+      }
     } else if (s.phase === "cashed") {
       g.fillStyle = "rgba(10,10,14,0.35)";
       g.fillRect(0, 0, this.W, this.H);
@@ -231,6 +311,17 @@ export class Renderer {
       this.otext("TAP TO CONTINUE", this.W / 2, this.H - 70, 36, "#ffffff", "#1c1c1c", 8);
     } else {
       this.drawHUD();
+      const goT = this.e.now - s.stateAt;
+      if (goT < 550) {
+        g.save();
+        g.globalAlpha = 1 - goT / 550;
+        g.font = "56px " + FONT;
+        g.textAlign = "center";
+        g.fillStyle = "rgba(45,45,45,0.35)";
+        g.fillText("GO!", this.W / 2 + 3, 452 + 4);
+        this.otext("GO!", this.W / 2, 452, 56, "#ffffff", "#e0dedb", 4);
+        g.restore();
+      }
     }
 
     // phone notch
@@ -246,16 +337,16 @@ export class Renderer {
     const g = this.ctx;
     g.fillStyle = GROUND;
     g.fillRect(0, 0, this.W, this.H);
-    const cellZ = 0.55,
+    const cellZ = 2.0,
       cellLat = 0.22;
-    const cam = this.e.state.x;
+    const cam = this.camX;
     const off = this.e.state.dist % cellZ;
     for (let zi = -4; zi < 90; zi++) {
       const z = zi * cellZ - off;
       const p = this.proj(z);
       if (p < 0.055) break;
       const row = Math.round((z + this.e.state.dist) / cellZ);
-      const span = (this.W / 2 + 30) / (LANE_W * p);
+      const span = (this.W / 2 + 30) / (this.lw * p);
       const sides: [number, number][] = [
         [cam - span, ROAD_L - RAIL_W - 0.06],
         [ROAD_R + RAIL_W + 0.06, cam + span],
@@ -283,7 +374,7 @@ export class Renderer {
     const oA = this.pt(latOut, Z0, RAIL_H), oB = this.pt(latOut, Z_FAR, RAIL_H);
     this.poly([iA, iB, mB, mA], "#493f35");
     this.poly([mA, mB, tB, tA], "#635a4c");
-    const seamZ = 2.6;
+    const seamZ = 7.5;
     const off = this.e.state.dist % seamZ;
     for (let k = 0; k < 30; k++) {
       const z = k * seamZ - off + Z0;
@@ -313,18 +404,35 @@ export class Renderer {
     this.quad(ROAD_L, ROAD_R, Z0, Z_FAR, ASPHALT);
   }
 
-  // The reference road has no edge lines: just the boundary dashes, with the
-  // green line hugging the cashout side of the 2.5 boundary.
+  // Boundary dashes plus the neon cashout edge, which runs slightly diagonal
+  // (nearer the player at low z) the way the capture's exit edge does.
   private drawMarkings() {
-    this.quad(GREEN_L, GREEN_R, Z0, Z_FAR, GREEN);
+    const g = this.ctx;
+    const latG = (z: number) => GREEN_LAT0 + GREEN_SLOPE * z;
+    const seg = (hw: number, fill: string) => {
+      for (let z = Z0; z < 100; z += 5) {
+        const z2 = z + 5.3;
+        if (this.proj(z) < 0.08) break;
+        this.poly(
+          [this.pt(latG(z) - hw, z), this.pt(latG(z) + hw, z), this.pt(latG(z2) + hw, z2), this.pt(latG(z2) - hw, z2)],
+          fill
+        );
+      }
+    };
+    g.save();
+    g.globalAlpha = 0.2;
+    seg(GREEN_HW * 2.4, GREEN);
+    g.globalAlpha = 1;
+    seg(GREEN_HW * 0.8, "#5aff28");
+    g.restore();
     const off = this.e.state.dist % DASH_PERIOD;
     for (const b of [0.5, 1.5, 2.5]) {
-      for (let zi = -3; zi < 32; zi++) {
+      for (let zi = -2; zi < 18; zi++) {
         const z = zi * DASH_PERIOD - off;
         const za = Math.max(Z0, z),
           zb = z + DASH_LEN;
         if (zb < Z0) continue;
-        if (this.proj(za) < 0.13) break;
+        if (this.proj(za) < 0.1) break;
         this.quad(b - DASH_HW, b + DASH_HW, za, zb, "#ffffff");
       }
     }
@@ -333,7 +441,7 @@ export class Renderer {
   // Painted in the cashout lane reading far-to-near, glyph tops toward the
   // road, each letter sized at its own depth.
   private zOf(y: number) {
-    return D0 * (AMP / (y - YH) - 1);
+    return (D0 * (AMP / (y - YH) - 1)) / this.zm;
   }
 
   /*
@@ -352,10 +460,10 @@ export class Renderer {
     const t = cv.getContext("2d")!;
     const wordLen = C.word.length * C.slot;
     const pxPerLat = C.texW / (C.latHalf * 2);
-    t.fillStyle = GREEN;
+    t.fillStyle = "#37f213";
     t.textAlign = "center";
     t.textBaseline = "middle";
-    t.font = (C.em / LANE_W) * pxPerLat + "px " + FONT;
+    t.font = (C.em / LANE_W0) * pxPerLat + "px " + FONT;
     for (let i = 0; i < C.word.length; i++) {
       const zc = (i + 0.5) * C.slot;
       t.save();
@@ -377,13 +485,13 @@ export class Renderer {
     const g = this.ctx;
     const wordLen = C.word.length * C.slot;
     const off = this.e.state.dist % C.period;
-    const lat0 = this.e.cashLane + 0.07 - C.latHalf;
-    const lat1 = this.e.cashLane + 0.07 + C.latHalf;
-    for (let zi = 0; zi < 5; zi++) {
-      const z0 = zi * C.period - off + 3;
+    const lat0 = C.latC - C.latHalf;
+    const lat1 = C.latC + C.latHalf;
+    for (let zi = 0; zi < 4; zi++) {
+      const z0 = zi * C.period - off + 4;
       const z1 = z0 + wordLen;
       const zNear = Math.max(z0, this.zOf(this.H));
-      const zFar = Math.min(z1, 60);
+      const zFar = Math.min(z1, 100);
       if (zFar <= zNear) continue;
       const yA = Math.max(0, Math.ceil(this.sy(zFar)));
       const yB = Math.min(this.H, Math.floor(this.sy(zNear)));
@@ -399,36 +507,41 @@ export class Renderer {
     }
   }
 
-  // Lane 0 is the rainbow lane: an opaque hue sweep along z, cycling 15.2
-  // degrees per z unit, with a softly blurred edge.
+  // Lane 0 is the rainbow lane: a world-anchored hue sweep along z (orange at
+  // the player's row rolling to magenta far out), with a wide soft glow.
   private drawRainbow() {
     const g = this.ctx;
-    const zTop = 46,
-      zBot = -4;
+    const zTop = 95,
+      zBot = -5;
     const yBot = this.sy(zBot),
       yTop = this.sy(zTop);
     const grad = g.createLinearGradient(0, yBot, 0, yTop);
     // stops uniform in screen y, so the sweep stays smooth near the viewer
-    const stops = 40;
+    const stops = 44;
     for (let k = 0; k <= stops; k++) {
       const y = yBot + (yTop - yBot) * (k / stops);
-      const z = D0 * (AMP / (y - YH) - 1);
-      const hue = ((201.5 + 15.17 * (z + this.e.state.dist)) % 360 + 360) % 360;
-      grad.addColorStop(k / stops, "hsl(" + hue + ",100%,45%)");
+      const z = this.zOf(y);
+      const hue = ((20 + 4.2 * (z + this.e.state.dist)) % 360 + 360) % 360;
+      grad.addColorStop(k / stops, "hsl(" + hue + ",100%,52%)");
     }
-    const pa = this.proj(zBot),
-      pb = this.proj(zTop);
-    g.save();
-    g.filter = "blur(2px)";
-    g.fillStyle = grad;
-    g.beginPath();
-    g.moveTo(this.sx(ROAD_L, pa), yBot);
-    g.lineTo(this.sx(ROAD_L, pb), yTop);
-    g.lineTo(this.sx(RAINBOW_R, pb), yTop);
-    g.lineTo(this.sx(RAINBOW_R, pa), yBot);
-    g.closePath();
-    g.fill();
-    g.restore();
+    const band = (latA: number, latB: number, blur: number, alpha: number) => {
+      const pa = this.proj(zBot),
+        pb = this.proj(zTop);
+      g.save();
+      g.filter = "blur(" + blur + "px)";
+      g.globalAlpha = alpha;
+      g.fillStyle = grad;
+      g.beginPath();
+      g.moveTo(this.sx(latA, pa), yBot);
+      g.lineTo(this.sx(latA, pb), yTop);
+      g.lineTo(this.sx(latB, pb), yTop);
+      g.lineTo(this.sx(latB, pa), yBot);
+      g.closePath();
+      g.fill();
+      g.restore();
+    };
+    band(-0.72, 0.72, 7, 0.3);
+    band(ROAD_L, 0.5, 2, 1);
   }
 
   /**
@@ -447,13 +560,16 @@ export class Renderer {
     taper = 1,
     hBase = 0
   ): Pt[] {
-    const { lanePx, zPx } = this.e.cfg;
+    // rotate in the VISUAL aspect (screen px per lane vs per z unit), not the
+    // engine's collision aspect, or the yawed sprite shears into a pancake
+    const lpx = this.lw,
+      zpx = (AMP * this.zm) / D0;
     const cs = Math.cos(yaw),
       sn = Math.sin(yaw);
     const corner = (dxLat: number, dzZ: number) => {
-      const dx = dxLat * lanePx,
-        dz = dzZ * zPx;
-      return { lat: latC + (dx * cs + dz * sn) / lanePx, z: zC + (-dx * sn + dz * cs) / zPx };
+      const dx = dxLat * lpx,
+        dz = dzZ * zpx;
+      return { lat: latC + (dx * cs + dz * sn) / lpx, z: zC + (-dx * sn + dz * cs) / zpx };
     };
     // 0 front-right, 1 front-left, 2 rear-left, 3 rear-right
     const c4 = [
@@ -491,16 +607,19 @@ export class Renderer {
       lat: latC + (dxLat * lanePx * cs + dzZ * zPx * sn) / lanePx,
       z: zC + (-dxLat * lanePx * sn + dzZ * zPx * cs) / zPx,
     });
+    // the capture's cars hold a constant on-screen width while the ground
+    // plane zooms, so lateral size is fixed in pixels, length in world z
+    const chw = CAR_W_PX / 2 / this.lw;
     // wheels first; the body floats just above them, so they only show in the
     // gap under the side faces the way the reference cars read
     if (p > 0.3) {
-      const wx = CAR_HALF_W * 0.9;
+      const wx = chw * 0.9;
       for (const [dx, dz] of [[-wx, CAR_HALF_L * 0.58], [wx, CAR_HALF_L * 0.58], [-wx, -CAR_HALF_L * 0.62], [wx, -CAR_HALF_L * 0.62]]) {
         const w = at(dx, dz);
-        this.box(w.lat, w.z, yaw, 0.032, 0.17, 0.26, { body: "#191b1f", dark: "#101216" });
+        this.box(w.lat, w.z, yaw, chw * 0.15, 0.5, 0.26, { body: "#191b1f", dark: "#101216" });
       }
     }
-    const T = this.box(latC, zC, yaw, CAR_HALF_W, CAR_HALF_L, CAR_H, col, CAR_TAPER, 0.14);
+    const T = this.box(latC, zC, yaw, chw, CAR_HALF_L, CAR_H, col, CAR_TAPER, 0.14);
     if (p < 0.3) return;
 
     const quadOf = (u0: number, u1: number, v0: number, v1: number, fill: string) =>
@@ -527,7 +646,7 @@ export class Renderer {
     // rear face: shadow strip at the foot, taillights, plate
     const rearAt = (u: number, hFrac: number) => {
       const top = this.topPt(T, u, 0);
-      return { x: top.x, y: top.y + (CAR_H - 0.14) * PXPM * p * (1 - hFrac) };
+      return { x: top.x, y: top.y + (CAR_H - 0.14) * (this.lw / 3.5) * p * (1 - hFrac) };
     };
     const rQuad = (u0: number, u1: number, h0: number, h1: number, fill: string) =>
       this.poly([rearAt(u0, h0), rearAt(u1, h0), rearAt(u1, h1), rearAt(u0, h1)], fill);
@@ -557,10 +676,19 @@ export class Renderer {
     g.restore();
   }
 
+  // The player runs blue and turns gold while riding the rainbow lane.
   private drawPlayer() {
     const s = this.e.state;
     const yaw = s.phase === "dead" ? 0.5 : s.theta;
-    this.drawCar(s.x, 0, yaw, PLAYER_COLOR, true);
+    const mix = (a: string, b: string) => {
+      const na = parseInt(a.slice(1), 16), nb = parseInt(b.slice(1), 16), f = this.gold;
+      const ch = (sh: number) => Math.round(((na >> sh) & 255) * (1 - f) + ((nb >> sh) & 255) * f);
+      return "#" + ((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1);
+    };
+    const col = this.gold < 0.02
+      ? PLAYER_COLOR
+      : { body: mix(PLAYER_COLOR.body, GOLD.body), dark: mix(PLAYER_COLOR.dark, GOLD.dark), roof: mix(PLAYER_COLOR.roof, GOLD.roof), glass: PLAYER_COLOR.glass };
+    this.drawCar(s.x, 0, yaw, col, true);
   }
 
   // Red block measured off the reference: bright top face, a light band at
@@ -575,7 +703,7 @@ export class Renderer {
     if (p < 0.25) return;
     const rearAt = (u: number, hFrac: number) => {
       const top = this.topPt(T, u, 0);
-      return { x: top.x, y: top.y + BAR_H * PXPM * p * (1 - hFrac) };
+      return { x: top.x, y: top.y + BAR_H * (this.lw / 3.5) * p * (1 - hFrac) };
     };
     this.poly([rearAt(0, 0.7), rearAt(1, 0.7), rearAt(1, 0), rearAt(0, 0)], "#5e0303");
   }
@@ -642,6 +770,21 @@ export class Renderer {
       p.r += p.grow * dt;
       const u = p.age / p.life;
       if (u >= 1) continue;
+      if (p.kind === "spark") {
+        g.save();
+        g.fillStyle = "rgba(255,255,255," + (0.9 * (1 - u)).toFixed(2) + ")";
+        g.translate(p.x, p.y);
+        g.beginPath();
+        for (let k = 0; k < 8; k++) {
+          const rr = k % 2 === 0 ? p.r : p.r * 0.28;
+          const a = (k / 8) * Math.PI * 2;
+          k ? g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : g.moveTo(rr, 0);
+        }
+        g.closePath();
+        g.fill();
+        g.restore();
+        continue;
+      }
       if (p.kind === "smoke") {
         const sh = Math.round(40 + u * 26);
         g.fillStyle = "rgba(" + (sh + 12) + "," + sh + "," + sh + "," + (0.5 * (1 - u * 0.75)).toFixed(2) + ")";
@@ -661,10 +804,14 @@ export class Renderer {
     this.fx.particles = this.fx.particles.filter((p) => p.age < p.life);
   }
 
-  // The reference HUD is just the score over the multiplier: white score with
-  // a soft gray drop shadow and no outline, dark multiplier with a white
-  // outline. Sizes and baselines are measured off the capture.
-  private drawHUD() {
+  /*
+   * The reference HUD, top to bottom, all screen-centered: the live payout in
+   * dollars (large, white, soft shadow), a small "SCORE: N,NNN" line whose
+   * zeros carry a slash, and the current lane's multiplier badge (dark with a
+   * white outline; riding the rainbow lane adds a hue-cycling glow). rollF<1
+   * rolls both numbers down toward zero for the crash animation.
+   */
+  private drawHUD(rollF = 1) {
     const g = this.ctx,
       s = this.e.state,
       cfg = this.e.cfg;
@@ -674,24 +821,61 @@ export class Renderer {
       g.fillStyle = "rgba(45,45,45,0.4)";
       g.fillText(txt, x + 3, y + 4);
     };
-    const score = String(s.score);
-    shadow(score, this.W / 2, 118, 70);
-    this.otext(score, this.W / 2, 118, 70, "#ffffff");
-    const m = Math.round(this.e.multiplier() * 2) / 2;
-    const mTxt = (m % 1 === 0 ? m : m.toFixed(1)) + "X";
-    shadow(mTxt, this.W / 2, 162, 50);
-    this.otext(mTxt, this.W / 2, 162, 50, "#2b2a2a", "#ffffff", 9);
+    const pay = cfg.entryFee * this.e.multiplier() * rollF;
+    const payTxt = pay < 0.005 ? "$0" : "$" + pay.toFixed(2);
+    shadow(payTxt, this.W / 2, 111, 64);
+    this.otext(payTxt, this.W / 2, 111, 64, "#ffffff");
+
+    const scoreTxt = "SCORE: " + Math.floor(s.score * rollF).toLocaleString("en-US");
+    shadow(scoreTxt, this.W / 2, 139, 15);
+    this.otext(scoreTxt, this.W / 2, 139, 15, "#ffffff", "#2d2d2d", 2.5);
+    this.slashZeros(scoreTxt, this.W / 2, 139, 15);
+
+    // during READY the reference shows a 1X placeholder, not the lane's mult
+    const mult = s.phase === "countdown" ? 1 : cfg.laneMult[s.lane];
+    if (mult > 0) {
+      const mTxt = mult + "X";
+      if (s.lane === 0) {
+        g.save();
+        g.shadowColor = `hsl(${(this.nowMs * 0.12) % 360},95%,60%)`;
+        g.shadowBlur = 16;
+        this.otext(mTxt, this.W / 2, 187, 52, "#262626", "#f2f2f2", 8);
+        g.restore();
+      }
+      shadow(mTxt, this.W / 2, 187, 52);
+      this.otext(mTxt, this.W / 2, 187, 52, "#262626", "#f2f2f2", 8);
+    }
     if (s.cashTimer > 0) {
       const frac = Math.min(1, s.cashTimer / cfg.cashHold);
       g.fillStyle = "rgba(20,60,30,0.55)";
       g.beginPath();
-      g.roundRect(this.W / 2 - 74, 184, 148, 16, 8);
+      g.roundRect(this.W / 2 - 74, 200, 148, 16, 8);
       g.fill();
       g.fillStyle = "#2ed94f";
       g.beginPath();
-      g.roundRect(this.W / 2 - 74, 184, 148 * frac, 16, 8);
+      g.roundRect(this.W / 2 - 74, 200, 148 * frac, 16, 8);
       g.fill();
-      this.otext("CASHING OUT", this.W / 2, 197, 13, "#0b2010");
+      this.otext("CASHING OUT", this.W / 2, 213, 13, "#0b2010");
+    }
+  }
+
+  // the reference score font slashes its zeros; overlay a short diagonal
+  private slashZeros(txt: string, cx: number, y: number, size: number) {
+    const g = this.ctx;
+    g.font = size + "px " + FONT;
+    const total = g.measureText(txt).width;
+    let x = cx - total / 2;
+    g.strokeStyle = "#2d2d2d";
+    g.lineWidth = 1.4;
+    for (const ch of txt) {
+      const w = g.measureText(ch).width;
+      if (ch === "0") {
+        g.beginPath();
+        g.moveTo(x + w * 0.26, y - size * 0.1);
+        g.lineTo(x + w * 0.74, y - size * 0.62);
+        g.stroke();
+      }
+      x += w;
     }
   }
 

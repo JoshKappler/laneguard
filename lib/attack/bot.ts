@@ -130,9 +130,11 @@ export class Bot {
     const e = this.engine,
       s = e.state;
     if (e.barrierBlocks(s.lane, l, s.speed * 0.9)) return false;
+    // flanking barriers are only a problem right beside the car: sitting next
+    // to one is safe, and crossOk() already vetoes crossing through one
     for (const bar of s.barriers) {
       if (bar.boundary !== l - 1 && bar.boundary !== l) continue;
-      if (bar.z1 > -e.HLZ - 3 && bar.z0 < e.HLZ + s.speed * 0.6) return false;
+      if (bar.z1 > -e.HLZ - 3 && bar.z0 < e.HLZ + 6) return false;
     }
     for (const car of s.cars) {
       if (car === threatCar || car.passed || car.lane !== l) continue;
@@ -153,6 +155,23 @@ export class Bot {
     return m;
   }
 
+  /** effective safety of a lane counting the follow-up car: a lane whose
+   *  second obstacle lands right behind the first is a chain trap */
+  private lookahead(l: number): number {
+    const e = this.engine;
+    let t1 = 99,
+      t2 = 99;
+    for (const car of e.state.cars) {
+      if (car.passed || car.lane !== l || car.z <= -e.COLL_Z) continue;
+      const t = Math.max(0, (car.z - e.COLL_Z) / e.closing(car));
+      if (t < t1) {
+        t2 = t1;
+        t1 = t;
+      } else if (t < t2) t2 = t;
+    }
+    return Math.min(t1, t2 + 0.75);
+  }
+
   private crossOk(from: number, dir: number): boolean {
     return !this.engine.barrierBlocks(from, from + dir, this.engine.state.speed * 0.9);
   }
@@ -163,12 +182,22 @@ export class Bot {
       cfg = e.cfg;
     const here = s.lane;
     const tHere = this.firstObs(here);
-    const clamp = (t: number) => Math.min(t, 4);
-    const dying = tHere < 0.7;
-    const val = (l: number) => (dying ? 0 : cfg.laneMult[l] * 0.3);
-    const margin = dying ? 0.05 : 0.6;
-    let best = here,
-      bestU = clamp(tHere) + val(here);
+    // parking in the cashout lane banks a worthless run, so unless the bot
+    // wants to bank, that lane is an escape hatch and never a place to sit
+    const trapped =
+      here === e.cashLane && !this.wantBank() && s.cashTimer > cfg.cashHold * 0.4;
+    // greed cools as the road speeds up, like the reference player retreating
+    // from 5X to the cheaper lanes late in the run
+    const greed = 0.55 * Math.min(1, (cfg.baseSpeed / s.speed) ** 2);
+    const val = (l: number) =>
+      l === e.cashLane && !this.wantBank() ? -1.5 : cfg.laneMult[l] * greed;
+    // survival first: rank lanes by safety class, and let value pick only
+    // among equally safe lanes (the reference player's shape)
+    const cls = (t: number) => (t >= 1.45 ? 2 : t >= 0.95 ? 1 : 0);
+    let best = here;
+    let bestC = trapped ? -1 : cls(tHere);
+    let bestV = trapped ? -99 : val(here) + 0.25;
+    let bestT = tHere;
     for (let l = 0; l < e.laneCount; l++) {
       if (l === here) continue;
       const dir = Math.sign(l - here);
@@ -184,19 +213,32 @@ export class Bot {
           break;
         }
       }
-      if (!ok || !this.laneClear(l, null)) continue;
-      const u = clamp(this.firstObs(l)) + val(l) - 0.35 * Math.abs(l - here);
-      if (u > bestU + margin) {
+      // the cashout lane is a dead-end escape (convoys can box you in until
+      // the timer banks $0), so take it only when no traffic lane is timeable
+      if (l === e.cashLane && !this.wantBank()) {
+        if (cls(tHere) > 0) continue;
+        let alt = tHere;
+        for (let k = 0; k < e.cashLane; k++)
+          if (k !== here) alt = Math.max(alt, this.firstObs(k));
+        if (alt > 0.55) continue;
+      }
+      // trapped: a tight merge beats the guaranteed dead bank
+      const passable = trapped ? this.firstObs(l) > 0.7 : this.laneClear(l, null);
+      if (!ok || !passable) continue;
+      const t = this.lookahead(l);
+      const c = cls(t);
+      const v = val(l) - 0.12 * Math.abs(l - here);
+      const better =
+        c !== bestC ? c > bestC : c === 2 ? v > bestV : t > bestT + 0.3;
+      if (better) {
         best = l;
-        bestU = u;
+        bestC = c;
+        bestV = v;
+        bestT = t;
       }
     }
     if (best === here) return 0;
-    const urgent = tHere < (this.mode === "perfect" ? cfg.threatWindow * 0.826 : cfg.threatWindow);
-    if (!urgent) {
-      if (s.x !== s.lane) return 0;
-      if (tHere > 2.2 && bestU - clamp(tHere) < 1.0) return 0;
-    }
+    if (!trapped && s.x !== s.lane) return 0;
     return Math.sign(best - here);
   }
 
@@ -211,14 +253,8 @@ export class Bot {
     return best;
   }
 
-  /**
-   * The smallest reaction time the detector could credit if we left `from`
-   * right now, in ms. Considers every un-logged threat in the lane (the engine
-   * credits the nearest by depth, which may not be the oldest) and treats cars
-   * about to enter the threat window as age-0 threats — because a car that
-   * becomes a threat DURING the brief swipe would be credited with a near-zero
-   * RT. Returns Infinity if nothing could be credited.
-   */
+  /** Smallest RT the detector could credit if we left `from` now (ms); cars
+   *  about to enter the threat window count as age 0. Infinity if none. */
   private minCreditAge(from: number, now: number): number {
     const e = this.engine;
     let min = Infinity;
@@ -269,8 +305,9 @@ export class Bot {
       for (const car of s.cars) {
         if (car.passed || car.lane !== l) continue;
         const tti = (car.z - e.COLL_Z) / e.closing(car);
-        // inside the threat window but not already overlapping: survivable-ish
-        if (tti > 0.15 && tti < e.cfg.threatWindow) return dir;
+        // inside the threat window but with room to enter, settle and dodge
+        // again: entry alone costs ~0.5s, so anything tighter is suicide
+        if (tti > 0.85 && tti < e.cfg.threatWindow) return dir;
       }
     }
     return 0;
@@ -331,12 +368,9 @@ export class Bot {
     if (this.pending) {
       const pend = this.pending;
       if (now < pend.fireAt) return out;
-      // RT gating: the credited reaction time the detector will measure is
-      // (now - threatAt) for the nearest un-logged threat in the lane we leave.
-      // A planner otherwise produces impossibly-short "reactions" when a threat
-      // appears just before it happens to move. Hold the fire until that
-      // credited RT has reached the sampled human value — so what the detector
-      // measures IS a human RT, not a decision-latency artifact.
+      // RT gating: hold the fire until the credited RT (now - threatAt of the
+      // nearest un-logged threat) reaches the sampled human value, so the
+      // detector measures a human RT rather than a decision-latency artifact.
       if (this.cfg.gateRtToThreat) {
         // reactive fires realize their sampled RT; risky/proactive must still
         // never realize a sub-floor credited RT. Gate on the YOUNGEST creditable
@@ -345,7 +379,11 @@ export class Bot {
           pend.intent !== "react" || pend.threatAt === 0
             ? this.cfg.rt.floor
             : pend.rt;
-        if (this.minCreditAge(e.state.lane, now) < gate) return out;
+        // in dense traffic each fresh follower resets the min credit age, so
+        // an un-bypassed gate defers the dodge forever; survival wins once
+        // impact is imminent (a panic reaction is human too)
+        const imminent = this.firstObs(e.state.lane) < 0.5;
+        if (!imminent && this.minCreditAge(e.state.lane, now) < gate) return out;
       }
       this.pending = null;
       // Re-derive the direction against the road as it is NOW. A bank-step
@@ -357,6 +395,10 @@ export class Bot {
         dir = this.creditedThreat(e.state.lane) ? this.safeDir() : this.bankStep();
       else dir = this.safeDir();
       if (dir) this.startSwipe(dir, now);
+      // blocked exit with danger live: keep the plan hot and re-poll, the way
+      // a human waits on a passing car, instead of paying a fresh RT
+      else if (pend.intent === "react" && this.firstObs(e.state.lane) < 1.3)
+        this.pending = { ...pend, fireAt: now + 50 };
       return out;
     }
 
@@ -413,8 +455,12 @@ export class Bot {
     const dir = banking ? this.bankStep() : this.safeDir();
     if (!dir) return out;
     const rt = this.sampleRt();
+    // trapped in the cashout lane with the timer filling: the exit is already
+    // planned, so fire with primed latency instead of a fresh reaction time
+    const primed =
+      e.state.lane === e.cashLane && !this.wantBank() && e.state.cashTimer > 0;
     this.pending = {
-      fireAt: now + rt,
+      fireAt: now + (primed ? Math.max(this.cfg.rt.floor, rt * 0.45) : rt),
       dir,
       rt,
       intent: banking ? "bank" : "react",

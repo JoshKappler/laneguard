@@ -22,8 +22,8 @@ export interface GameConfig {
   densityRamp: number;
   /** probability a wave carries a barrier trap */
   barrierFreq: number;
-  /** probability a wave puts traffic in the cashout lane */
-  cashTrafficFreq: number;
+  /** probability a wave is a two-lane pair instead of a single car */
+  pairFreq: number;
   spawnZ: number;
   /** seconds of time-to-impact at which a blocking car becomes a threat */
   threatWindow: number;
@@ -41,8 +41,19 @@ export interface GameConfig {
   /** seconds the cashout lane must be held to bank the run */
   cashHold: number;
   entryFee: number;
-  multCap: number;
-  multRate: number;
+  /** score gained per z travelled in a 1x lane (video-fitted) */
+  scorePerZ: number;
+  /**
+   * Payout curve as [score, multiple-of-entry] breakpoints, linearly
+   * interpolated. Points up to 5582 are read off the reference session's HUD;
+   * 5582-8497 is the observed flat 1.29x tier; the tiers above 8497 were not
+   * reached in the reference run and are interpolated to the lobby's 3.0x cap.
+   */
+  payout: [number, number][];
+  /** READY countdown before the road starts moving, ms */
+  introMs: number;
+  /** chance a barrier wave drops a second block on another legal boundary */
+  barrierPairFreq: number;
 }
 
 export type RtFamily = "gaussian" | "exgaussian";
@@ -279,30 +290,40 @@ export const DEFAULT_CONFIG: BenchConfig = {
     laneMult: [5, 2, 1, 0],
     lanePx: 62,
     zPx: 14.5,
-    baseSpeed: 15,
-    maxSpeed: 34,
-    speedRamp: 0.42,
+    // motion constants fitted to a 60 fps capture of the shipped game
+    // (references/: dash-line tracking, 2026-08-24 session)
+    baseSpeed: 50,
+    maxSpeed: 120,
+    speedRamp: 0.9,
     waveGapStart: 34,
-    waveGapMin: 19,
-    waveGapRamp: 0.3,
-    densityStart: 0.55,
-    densityMax: 0.9,
-    densityRamp: 0.007,
-    barrierFreq: 0.34,
-    cashTrafficFreq: 0.25,
-    spawnZ: 55,
+    waveGapMin: 24,
+    waveGapRamp: 0.09,
+    densityStart: 0.75,
+    densityMax: 1.0,
+    densityRamp: 0.005,
+    barrierFreq: 0.1,
+    pairFreq: 0.1,
+    spawnZ: 105,
     threatWindow: 1.15,
     swipeThreshold: 28,
-    maxSteer: 0.6,
-    steerRate: 22,
+    maxSteer: 0.475,
+    steerRate: 30,
     hitHalfWidth: 25,
     hitHalfLength: 50,
     hitboxShrinkMax: 0.5,
     hitboxShrinkAngle: 0.35,
     cashHold: 1.6,
-    entryFee: 1.0,
-    multCap: 2.5,
-    multRate: 0.004,
+    entryFee: 3.01,
+    scorePerZ: 0.52,
+    payout: [
+      [0, 0], [1350, 0], [2050, 0.004], [2350, 0.013], [2750, 0.023],
+      [3200, 0.043], [3600, 0.08], [3950, 0.136], [4350, 0.243], [4500, 0.3],
+      [4800, 0.335], [4976, 0.395], [5059, 0.555], [5360, 0.964],
+      [5582, 1.289], [8497, 1.289], [8933, 1.63], [9192, 1.97],
+      [9436, 2.31], [9757, 2.66], [10084, 3.0],
+    ],
+    introMs: 1650,
+    barrierPairFreq: 0.3,
   },
   bot: {
     rt: { family: "gaussian", mean: 235, sd: 42, tau: 80, floor: 150 },
@@ -330,7 +351,7 @@ export const DEFAULT_CONFIG: BenchConfig = {
     reaction: {
       minDodges: 6,
       floorMs: 130,
-      floorSus: 0.55,
+      floorSus: 0.7,
       cvTight: 0.1,
       cvTightSus: 0.5,
       cvLow: 0.17,
@@ -380,13 +401,13 @@ export const DEFAULT_CONFIG: BenchConfig = {
     texture: {
       minMoves: 14,
       zeroAbortSus: 0.25,
-      noContestSus: 0.45,
+      noContestSus: 0.3,
       contestMinN: 3,
       allSurvivedSus: 0.45,
       allSurvivedSusHi: 0.6,
       allSurvivedHiN: 5,
-      minRunEnds: 3,
-      neverBanksSus: 0.3,
+      minRunEnds: 6,
+      neverBanksSus: 0.15,
       fatalWindowMs: 1400,
     },
     integrity: { untrustedSus: 0.8, minSwipes: 3 },
@@ -624,21 +645,18 @@ export const PRESETS: Preset[] = [
       hwInject: true,
       bot: {
         noise: { model: "organic" },
-        rt: { family: "exgaussian", mean: 210, sd: 40, tau: 90, floor: 170 },
+        rt: { family: "exgaussian", mean: 185, sd: 32, tau: 60, floor: 170 },
         gateRtToThreat: true,
         riskPerMin: 0.7,
         abortsPerMin: 1.6,
         /*
-         * Banking at 30 comes out of the head-to-head sweep (`pnpm evo`,
-         * 1.2M runs): it is the greed level whose win rate holds up against
-         * every modeled field — 54.4-57.9%, versus bank@12 which scores higher
-         * against a weak field but collapses to 49.8% against a strong one.
-         * It also makes the attacker QUIETER, not louder: banking retires the
-         * "never banks a run" texture flag, so SUSPECT touches drop from 12.5%
-         * of seeds to 5% (40 seeds) while BOT stays at 0%. A bot that cashes out like a
-         * human is both harder to see and better at winning.
+         * Head-to-head, any banked run beats a forfeit, and the payout curve
+         * pays $0 below ~2050, so the profit-optimal policy banks just past
+         * that cliff rather than chasing the 5430 break-even a solo player
+         * needs. Banking at all also retires the "never banks a run" texture
+         * flag. (Supersedes the pre-video `pnpm evo` sweep's bank@30.)
          */
-        cashout: { target: 30 },
+        cashout: { target: 2600 },
       },
     },
   },

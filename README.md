@@ -9,12 +9,15 @@ are what actually bind a bot.
 **Live: [laneguard.joshuakappler.com](https://laneguard.joshuakappler.com)** ·
 [read the analysis →](./REPORT.md) · live writeup at `/writeup`
 
-> **Scope.** The game is an original simulation, built by eye from screenshots
-> of the shipped game taken on my own phone plus Triumph's public marketing and
-> App Store images (all catalogued in `references/MANIFEST.md`). Nothing here
-> reverse-engineers, decompiles, inspects, or runs against Triumph's real app or
-> servers, and nothing is usable as a cheat against it. Every number in the UI and docs comes from code that ran; nothing is
-> invented, and first-principles priors are labeled as priors.
+> **Scope.** The game is an original simulation, frame-fitted to a screen
+> recording of one full session of the shipped game played on my own phone,
+> plus my own screenshots and Triumph's public marketing and App Store images
+> (all catalogued in `references/MANIFEST.md`): projection, speed ramp,
+> traffic mix, lane-change dynamics, scoring, and the dollar payout curve are
+> measured, not guessed. Nothing here reverse-engineers, decompiles, inspects,
+> or runs against Triumph's real app or servers, and nothing is usable as a
+> cheat against it. Every number in the UI and docs comes from code that ran;
+> nothing is invented, and first-principles priors are labeled as priors.
 
 The bench is four tabs on one nav: setup, run, results, writeup. A first visit
 boots a pre-run demo (the naive scripted bot, fast-forwarded 3 sim-minutes) so
@@ -51,7 +54,7 @@ log, calibration state, and the server-side economy and cadence panels.
 ```bash
 pnpm install
 pnpm dev          # the bench at http://localhost:3000
-pnpm test         # 84 tests: parity, determinism, attacker behavior, ROC math
+pnpm test         # 86 tests: parity, determinism, attacker behavior, ROC math
 pnpm batch        # regenerate the attacker/economy/cadence tables
 pnpm evo          # head-to-head sweep: win rate from play, not assumption
 pnpm calibrate    # fit thresholds to a human corpus (see below)
@@ -89,32 +92,32 @@ matters.
 | attacker | verdict at 180 s | ever SUSPECT | ever BOT | how it's caught (or not) |
 |---|---|---|---|---|
 | naive scripted | **BOT 100%** | 0/12 | **12/12** | kinematics (jitter ≈ 0) + event provenance, in seconds |
-| replay farm (injected) | **BOT 100%** | 0/12 | **12/12** | replay similarity — repeats in shape *and* timing |
-| evasive generative | BOT 8% | 11/12 | **2/12** | organic noise beats motor forensics; texture catches it slowly |
+| replay farm (injected) | **BOT 100%** | 1/12 | **12/12** | replay similarity — repeats in shape *and* timing |
+| evasive generative | BOT 8% | 11/12 | **8/12** | organic noise beats motor forensics; the impossible-RT artifact lands in ~1 min |
 | **stealth camouflage** | **HUMAN 12/12** | 0/12 | **0/12** | **never actioned by the client-side detector** |
 
 The stealth bot uses organic motor noise (pink 1/f + tremor + drift), ex-Gaussian
 reaction times gated to threat onset, deliberate imperfect play (it enters
 contested space and genuinely crashes for it, and fakes aborted gestures), and a
 human banking discipline. Banking changes two numbers at once: cashing out
-retires the "never banks a run" texture flag, so adding it made the attacker
-*better at winning* (head-to-head win rate 49-53% → 54-58% across the modeled
-fields) and *quieter* (SUSPECT touches 12.5% → 5% of seeds over a 40-seed
-sweep, ever-BOT 0 both ways). A competent attacker looks **more** normal as it
-gets stronger, so better play is not itself a tell.
+retires the "never banks a run" texture flag, and it made the attacker *better
+at winning* (head-to-head win rate 49.9% → 55.3% against the modeled field on
+shared courses), because under the video-fitted payout any banked run beats a
+forfeit. A competent attacker looks **more** normal as it gets stronger, so
+better play is not itself a tell.
 
 Three minutes doesn't separate the last two rungs, so run both to 10 minutes
 (`pnpm batch --duration 600`):
 
 | attacker | verdict at 600 s | ever SUSPECT | ever BOT | mean conf |
 |---|---|---|---|---|
-| evasive generative | **BOT 83%** | 11/12 | **10/12** | 0.55 |
-| **stealth camouflage** | **HUMAN 12/12** | 0/12 | **0/12** | **0.05** |
+| evasive generative | **SUSPECT 100%** | 12/12 | **9/12** | 0.50 |
+| **stealth camouflage** | **HUMAN 12/12** | 0/12 | **0/12** | **0.06** |
 
-Given time the detector *does* win against the evasive bot (2/12 seeds at three
-minutes → 10/12 at ten). The stealth rung breaks that trend: 0/12 however long
-it runs, with confidence falling as the session grows. It can still transiently
-trip the SUSPECT review tier (2 of 40 seeds in a wider sweep).
+The detector holds its grip on the evasive bot: a median 57 s to the first BOT
+touch, and every seed pinned at SUSPECT for as long as the session runs. The
+stealth rung breaks that trend: 0/12 however long it runs, with confidence flat
+at 0.06 while the session grows.
 
 ## Why the economy wins
 
@@ -124,7 +127,10 @@ already a **3.3σ** outlier — only **2 of 400** simulated players match it. Bu
 that sweep takes the win rate as an *input*, so `pnpm evo` measures it instead:
 **1,196,000 head-to-head runs** (5 modeled fields x 160 players x 1,000 shared
 courses, 99 attacker policies x 4 seeds), both players driving the same seeded
-course so the comparison isolates play quality.
+course so the comparison isolates play quality. (Sweep measured 2026-08-21
+against the pre-recording build; the 2026-08-24 video-fitted physics and payout
+shift the exact percentages and the sweep is due a re-run. The structural
+findings below are properties of the match rules, not of those constants.)
 
 Sweeping the three things that can each decide the answer on their own — how
 competent the field is, whether a crashed run still scores, and how
@@ -142,9 +148,12 @@ conditions worth spelling out:
   to register compresses the population win-rate spread to ~3 pp, so any
   consistent winner is loud. Letting crashed runs score widens it to ~9-10 pp,
   and a 71% bot reads as just 2.1σ. Same detector, same bot.
-- **The attacker's profit is the field's mistakes.** The modeled fields bank at
-  30-50 when the optimum is 12-30; that gap is the entire edge. Teaching players
-  to bank well is an anti-cheat lever, and a cheaper one than a detector.
+- **The attacker's profit is the field's mistakes.** The video-fitted payout
+  pays $0 below a score cliff and a solo player only breaks even far above it,
+  but head-to-head any banked run beats a forfeit, so the optimum is banking
+  just past the cliff while human instinct chases break-even; that gap is the
+  entire edge. Teaching players to bank well is an anti-cheat lever, and a
+  cheaper one than a detector.
 
 Full tables and method in [REPORT.md](REPORT.md) §5a.
 

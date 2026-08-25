@@ -9,19 +9,29 @@ function freshEngine(seed = 42) {
   return new Engine(DEFAULT_CONFIG.game, mulberry32(seed));
 }
 
+/** resetRun, then step through the READY countdown into the running phase */
+function startRun(e: Engine) {
+  const evs = e.resetRun();
+  for (let i = 0; i < 300 && e.state.phase === "countdown"; i++) e.step(DT);
+  return evs;
+}
+
 describe("engine basics", () => {
-  test("starts idle; resetRun starts a run with legacy initial state", () => {
+  test("starts idle; resetRun opens the READY countdown, then the run", () => {
     const e = freshEngine();
     expect(e.state.phase).toBe("idle");
     e.resetRun();
-    expect(e.state.phase).toBe("running");
+    expect(e.state.phase).toBe("countdown");
     expect(e.state.lane).toBe(1);
     expect(e.state.speed).toBe(DEFAULT_CONFIG.game.baseSpeed);
+    for (let i = 0; i < 300 && e.state.phase === "countdown"; i++) e.step(DT);
+    expect(e.state.phase).toBe("running");
+    expect(e.now).toBeGreaterThanOrEqual(DEFAULT_CONFIG.game.introMs);
   });
 
   test("difficulty ramps with run time and clamps at configured limits", () => {
     const e = freshEngine();
-    e.resetRun();
+    startRun(e);
     for (let i = 0; i < 60 * 120; i++) {
       e.state.cars = []; // keep the road clear so the run survives the full 2 min
       e.state.barriers = [];
@@ -32,12 +42,13 @@ describe("engine basics", () => {
     expect(e.state.waveGap).toBe(DEFAULT_CONFIG.game.waveGapMin);
   });
 
-  test("holding the cashout lane banks entry × multiplier and ends the run", () => {
+  test("holding the cashout lane banks entry × payout curve and ends the run", () => {
     const e = freshEngine(7);
-    e.resetRun();
-    // teleport-style: walk lane target to the cashout lane, let steering settle
+    startRun(e);
+    // pretend the run already earned a mid-curve score, then go bank it
     e.state.cars = [];
     e.state.barriers = [];
+    e.state.score = 5000;
     e.keyLaneChange(1, true, e.now);
     e.keyLaneChange(1, true, e.now);
     let banked = 0;
@@ -51,14 +62,15 @@ describe("engine basics", () => {
     }
     expect(e.state.phase).toBe("cashed");
     expect(banked).toBeGreaterThan(0);
-    expect(banked).toBeLessThanOrEqual(
-      DEFAULT_CONFIG.game.entryFee * DEFAULT_CONFIG.game.multCap
-    );
+    // the cashout lane earns nothing, so the score froze at 5000
+    expect(banked).toBeCloseTo(DEFAULT_CONFIG.game.entryFee * e.multiplier(), 6);
+    const cap = DEFAULT_CONFIG.game.payout.at(-1)![1];
+    expect(banked).toBeLessThanOrEqual(DEFAULT_CONFIG.game.entryFee * cap);
   });
 
   test("steering banks toward the target lane and lateral velocity follows heading", () => {
     const e = freshEngine();
-    e.resetRun();
+    startRun(e);
     e.state.cars = [];
     e.state.barriers = [];
     e.keyLaneChange(-1, true, e.now); // lane 1 -> 0
@@ -71,7 +83,7 @@ describe("engine basics", () => {
 
   test("swipe input pipeline commits a lane change at the configured threshold", () => {
     const e = freshEngine();
-    e.resetRun();
+    startRun(e);
     e.state.cars = [];
     const t0 = e.now;
     e.input.begin(200, 560, true, "pointer", t0);
@@ -85,7 +97,7 @@ describe("engine basics", () => {
 
   test("a released sub-threshold gesture is reported as an abort", () => {
     const e = freshEngine();
-    e.resetRun();
+    startRun(e);
     const t0 = e.now;
     e.input.begin(200, 560, true, "pointer", t0);
     e.input.move(206, 561, t0 + 30);
@@ -104,7 +116,7 @@ describe("engine determinism", () => {
       const log: string[] = [];
       for (let i = 0; i < 60 * 30; i++) {
         for (const ev of e.step(DT)) log.push(ev.t.toFixed(3) + ev.kind);
-        if (e.state.phase !== "running") e.resetRun();
+        if (e.state.phase === "dead" || e.state.phase === "cashed") e.resetRun();
       }
       return {
         log: log.join("|"),
@@ -137,7 +149,7 @@ describe("lane-count generalization", () => {
     e.resetRun();
     for (let i = 0; i < 60 * 20; i++) {
       e.step(DT);
-      if (e.state.phase !== "running") e.resetRun();
+      if (e.state.phase === "dead" || e.state.phase === "cashed") e.resetRun();
       for (const c of e.state.cars) {
         expect(c.lane).toBeGreaterThanOrEqual(0);
         expect(c.lane).toBeLessThan(3);
