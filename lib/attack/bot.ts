@@ -129,7 +129,7 @@ export class Bot {
   private laneClear(l: number, threatCar: Car | null): boolean {
     const e = this.engine,
       s = e.state;
-    if (e.barrierBlocks(s.lane, l, s.speed * 0.9)) return false;
+    if (e.barrierBlocks(s.lane, l, s.speed * 0.45)) return false;
     // flanking barriers are only a problem right beside the car: sitting next
     // to one is safe, and crossOk() already vetoes crossing through one
     for (const bar of s.barriers) {
@@ -173,7 +173,22 @@ export class Bot {
   }
 
   private crossOk(from: number, dir: number): boolean {
-    return !this.engine.barrierBlocks(from, from + dir, this.engine.state.speed * 0.9);
+    return !this.engine.barrierBlocks(from, from + dir, this.engine.state.speed * 0.45);
+  }
+
+  /** seconds until lane l's nearest approaching car shuts its entry window */
+  private openUntil(l: number): number {
+    const e = this.engine;
+    let m = 99;
+    for (const car of e.state.cars) {
+      if (car.passed || car.lane !== l || car.z <= -e.COLL_Z) continue;
+      const cl = e.closing(car);
+      const lead = cl * 0.55 + e.COLL_Z;
+      if (car.z <= lead) return 0;
+      const t = (car.z - lead) / cl;
+      if (t < m) m = t;
+    }
+    return m;
   }
 
   private safeDir(): number {
@@ -186,18 +201,35 @@ export class Bot {
     // wants to bank, that lane is an escape hatch and never a place to sit
     const trapped =
       here === e.cashLane && !this.wantBank() && s.cashTimer > cfg.cashHold * 0.4;
-    // greed cools as the road speeds up, like the reference player retreating
-    // from 5X to the cheaper lanes late in the run
-    const greed = 0.55 * Math.min(1, (cfg.baseSpeed / s.speed) ** 2);
+    // the reference player never retreats from 5X (the badge log shows 5X at
+    // the very end of the run), so greed does not cool with speed
+    const greed = 0.55;
     const val = (l: number) =>
       l === e.cashLane && !this.wantBank() ? -1.5 : cfg.laneMult[l] * greed;
     // survival first: rank lanes by safety class, and let value pick only
     // among equally safe lanes (the reference player's shape)
     const cls = (t: number) => (t >= 1.45 ? 2 : t >= 0.95 ? 1 : 0);
-    let best = here;
-    let bestC = trapped ? -1 : cls(tHere);
-    let bestV = trapped ? -99 : val(here) + 0.25;
-    let bestT = tHere;
+    // A lane with a ~1 s window is habitable IF a door stays open until its
+    // threat lands: the reference player perpetually rides the busy 5X lane
+    // on exactly these short chained windows.
+    const escape = (l: number, t: number): boolean => {
+      for (const m of [l - 1, l + 1]) {
+        if (m < 0 || m >= e.laneCount) continue;
+        if (m === e.cashLane && !this.wantBank()) continue;
+        if (this.openUntil(m) > t - 0.2) return true;
+      }
+      return false;
+    };
+    // the current lane needs time AND a live door (side-by-side pairs shut
+    // doors early); a candidate is enterable on ~1 s if its own door holds
+    const habitable = (l: number, t: number) =>
+      l === here
+        ? t >= 1.35 && (t >= 2.6 || escape(l, t))
+        : cls(t) === 2 || (cls(t) === 1 && escape(l, t));
+
+    interface Cand { l: number; t: number; v: number }
+    const cands: Cand[] = [];
+    if (!trapped) cands.push({ l: here, t: tHere, v: val(here) + 0.25 });
     for (let l = 0; l < e.laneCount; l++) {
       if (l === here) continue;
       const dir = Math.sign(l - here);
@@ -225,21 +257,28 @@ export class Bot {
       // trapped: a tight merge beats the guaranteed dead bank
       const passable = trapped ? this.firstObs(l) > 0.7 : this.laneClear(l, null);
       if (!ok || !passable) continue;
-      const t = this.lookahead(l);
-      const c = cls(t);
-      const v = val(l) - 0.12 * Math.abs(l - here);
-      const better =
-        c !== bestC ? c > bestC : c === 2 ? v > bestV : t > bestT + 0.3;
-      if (better) {
-        best = l;
-        bestC = c;
-        bestV = v;
-        bestT = t;
+      cands.push({ l, t: this.lookahead(l), v: val(l) - 0.12 * Math.abs(l - here) });
+    }
+    // value-first among habitable lanes; survival-first when nothing is
+    const habs = cands.filter((c) => habitable(c.l, c.t));
+    let best: Cand | undefined;
+    if (habs.length) {
+      for (const c of habs)
+        if (!best || c.v > best.v || (c.v === best.v && c.t > best.t)) best = c;
+    } else {
+      for (const c of cands) {
+        if (!best) {
+          best = c;
+          continue;
+        }
+        const cc = cls(c.t),
+          bc = cls(best.t);
+        if (cc !== bc ? cc > bc : c.t > best.t + 0.3) best = c;
       }
     }
-    if (best === here) return 0;
+    if (!best || best.l === here) return 0;
     if (!trapped && s.x !== s.lane) return 0;
-    return Math.sign(best - here);
+    return Math.sign(best.l - here);
   }
 
   /** the car laneChange() would credit with the RT if we leave `from` now */
@@ -301,7 +340,7 @@ export class Bot {
     for (const dir of this.rand() < 0.5 ? [-1, 1] : [1, -1]) {
       const l = s.lane + dir;
       if (l < 0 || l >= e.laneCount) continue;
-      if (e.barrierBlocks(s.lane, l, s.speed * 0.9)) continue;
+      if (e.barrierBlocks(s.lane, l, s.speed * 0.45)) continue;
       for (const car of s.cars) {
         if (car.passed || car.lane !== l) continue;
         const tti = (car.z - e.COLL_Z) / e.closing(car);
@@ -455,10 +494,11 @@ export class Bot {
     const dir = banking ? this.bankStep() : this.safeDir();
     if (!dir) return out;
     const rt = this.sampleRt();
-    // trapped in the cashout lane with the timer filling: the exit is already
-    // planned, so fire with primed latency instead of a fresh reaction time
+    // planned repositions (hop back to value, exit the cashout trap) fire with
+    // primed latency: the human pre-planned them, and nothing credits an RT
     const primed =
-      e.state.lane === e.cashLane && !this.wantBank() && e.state.cashTimer > 0;
+      (e.state.lane === e.cashLane && !this.wantBank() && e.state.cashTimer > 0) ||
+      (!banking && this.firstObs(e.state.lane) > 1.5);
     this.pending = {
       fireAt: now + (primed ? Math.max(this.cfg.rt.floor, rt * 0.45) : rt),
       dir,

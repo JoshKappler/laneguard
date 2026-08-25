@@ -16,9 +16,7 @@ const YH = -148; // vanishing point, above the frame
 const AMP = 778; // player row sits at YH + AMP
 const D0 = 45;
 const LANE_W0 = 174.5; // px per lane at the player row, at base speed
-const ZOOM_K = 0.00564; // ground-plane zoom-out per unit of speed over base
-const Z_FAR = 130;
-const Z0 = -7;
+const Z0 = -18; // near clip: past the frame bottom at every zoom
 
 const CAR_W_PX = 87; // constant on-screen car width at the player row
 const CAR_HALF_L = 3.42; // world z units
@@ -43,7 +41,7 @@ const CAM_OMEGA = 14, CAM_ZETA = 0.5;
 const GOLD = { body: "#cda21a", dark: "#8a6c09", roof: "#ecc746", glass: "#0b0c10" };
 
 // road-space texture for the flat CASHOUT lettering
-const CASH = { word: "CASHOUT", slot: 4.6, period: 62, latHalf: 0.48, latC: 3.38, texW: 200, texH: 640, em: 158 };
+const CASH = { word: "CASHOUT", slot: 4.6, period: 62, latHalf: 0.48, latC: 3.38, texW: 200, texH: 640, em: 215 };
 
 export interface Particle {
   x: number; y: number; vx: number; vy: number;
@@ -91,6 +89,7 @@ export class Renderer {
   private puffSeed = 0xf1a2;
   private playerScreenY = YH + AMP;
   private cashTex: HTMLCanvasElement | null = null;
+  private cashTexSmall: HTMLCanvasElement | null = null;
   private cashTexReal = false;
   private camX = 1;
   private camV = 0;
@@ -98,6 +97,7 @@ export class Renderer {
   private sparkAcc = 0;
   private zm = 1;
   private lw = LANE_W0;
+  private zf = 200; // far clip: past the frame top at the current zoom
   private nowMs = 0;
   private lastPhase = "";
 
@@ -146,29 +146,16 @@ export class Renderer {
     for (let i = 0; i < 8; i++) this.emitPuff("fire");
   }
 
-  /** the reference READY: chunky gray letters, white rim, playful tilts */
-  private readyWord() {
+  private goWord(alpha: number) {
     const g = this.ctx;
-    const size = 46;
-    g.font = size + "px " + FONT;
-    const rots = [-0.07, 0.05, -0.03, 0.06, -0.08];
-    const dys = [2, -2, 1, -3, 3];
-    const word = "READY";
-    const widths = [...word].map((ch) => g.measureText(ch).width);
-    const total = widths.reduce((a, b) => a + b, 0) + (word.length - 1) * 2;
-    let x = this.W / 2 - total / 2;
-    for (let i = 0; i < word.length; i++) {
-      g.save();
-      g.translate(x + widths[i] / 2, 445 + dys[i]);
-      g.rotate(rots[i]);
-      g.fillStyle = "rgba(45,45,45,0.35)";
-      g.font = size + "px " + FONT;
-      g.textAlign = "center";
-      g.fillText(word[i], 2, 3);
-      this.otext(word[i], 0, 0, size, "#ababab", "#f2f2f2", 5);
-      g.restore();
-      x += widths[i] + 2;
-    }
+    g.save();
+    g.globalAlpha = alpha;
+    g.font = "56px " + FONT;
+    g.textAlign = "center";
+    g.fillStyle = "rgba(45,45,45,0.35)";
+    g.fillText("GO!", this.W / 2 + 3, 452 + 4);
+    this.otext("GO!", this.W / 2, 452, 56, "#ffffff", "#e0dedb", 4);
+    g.restore();
   }
 
   private otext(txt: string, x: number, y: number, size: number, fill: string, stroke?: string, strokeW?: number, align?: CanvasTextAlign) {
@@ -205,8 +192,9 @@ export class Renderer {
     this.lastPhase = s.phase;
     // ground-plane zoom, spring camera and the gold rainbow-lane skin all
     // follow engine state at frame rate
-    this.zm = 1 / (1 + ZOOM_K * Math.max(0, s.speed - this.e.cfg.baseSpeed));
+    this.zm = 1 / (1 + this.e.cfg.zoomK * Math.max(0, s.speed - this.e.cfg.baseSpeed));
     this.lw = LANE_W0 * this.zm;
+    this.zf = 200 / this.zm;
     if (s.phase === "running") {
       const cdt = Math.min(dt, 0.05);
       this.camV += (CAM_OMEGA * CAM_OMEGA * (s.x - this.camX) - 2 * CAM_ZETA * CAM_OMEGA * this.camV) * cdt;
@@ -245,15 +233,17 @@ export class Renderer {
     this.drawCashoutText();
     this.wall(ROAD_L, ROAD_L - RAIL_W);
     this.wall(ROAD_R, ROAD_R + RAIL_W);
+    this.drawRainbowGlow();
 
     // far-to-near painter's order over cars, barrier blocks, and the player
+    const hz = this.e.spawnHorizon();
     const items: { z: number; kind: "car" | "bar" | "me"; o?: Car | Barrier }[] = [];
-    for (const c of s.cars) if (c.z > -8 && c.z < this.e.cfg.spawnZ + 4) items.push({ z: c.z, kind: "car", o: c });
+    for (const c of s.cars) if (c.z > -8 && c.z < hz + 4) items.push({ z: c.z, kind: "car", o: c });
     for (const b of s.barriers) {
       for (let z = b.z0; z < b.z1; z += BAR_PERIOD) {
         const zEnd = Math.min(b.z1, z + BAR_HALF_L * 2);
         const zMid = (z + zEnd) / 2;
-        if (zEnd < -6 || z > this.e.cfg.spawnZ + 4) continue;
+        if (zEnd < -6 || z > hz + 4) continue;
         items.push({ z: zMid, kind: "bar", o: { ...b, z0: z, z1: zEnd } });
       }
     }
@@ -280,12 +270,26 @@ export class Renderer {
     }
 
     if (s.phase === "idle") {
-      g.fillStyle = "rgba(10,10,14,0.52)";
+      // measured off the settled reference start screen: the scene multiplies
+      // to roughly a third of its live brightness under the menu
+      g.fillStyle = "rgba(0,0,0,0.78)";
       g.fillRect(0, 0, this.W, this.H);
+      // the reference menu furniture is itself dimmed: white text peaks at
+      // 181/255 and yellow at 70% of its live value, so the UI rides at 0.7
+      g.save();
+      g.globalAlpha = 0.7;
       this.drawStartScreen();
+      g.restore();
     } else if (s.phase === "countdown") {
+      // the reference READY: HUD fades in over ~1 s, then GO! fades in ahead
+      // of the road starting to move; there is no separate READY word
+      const tRel = this.e.now - s.stateAt;
+      g.save();
+      g.globalAlpha = Math.min(1, tRel / 1000);
       this.drawHUD();
-      this.readyWord();
+      g.restore();
+      const goA = Math.min(1, Math.max(0, (tRel - 0.3 * this.e.cfg.introMs) / (0.7 * this.e.cfg.introMs)));
+      if (goA > 0.02) this.goWord(goA);
     } else if (s.phase === "dead") {
       // the reference crash: numbers roll down and fade for ~1.6 s, then the
       // CRASHED screen lands at ~2 s
@@ -312,22 +316,14 @@ export class Renderer {
     } else {
       this.drawHUD();
       const goT = this.e.now - s.stateAt;
-      if (goT < 550) {
-        g.save();
-        g.globalAlpha = 1 - goT / 550;
-        g.font = "56px " + FONT;
-        g.textAlign = "center";
-        g.fillStyle = "rgba(45,45,45,0.35)";
-        g.fillText("GO!", this.W / 2 + 3, 452 + 4);
-        this.otext("GO!", this.W / 2, 452, 56, "#ffffff", "#e0dedb", 4);
-        g.restore();
-      }
+      // the reference GO! is gone within a quarter second of the road moving
+      if (goT < 250) this.goWord(1 - goT / 250);
     }
 
     // phone notch
     g.fillStyle = "#000";
     g.beginPath();
-    g.roundRect(this.W / 2 - 61, 13, 122, 32, 16);
+    g.roundRect(this.W / 2 - 62, 17, 124, 29, 14.5);
     g.fill();
   }
 
@@ -337,11 +333,11 @@ export class Renderer {
     const g = this.ctx;
     g.fillStyle = GROUND;
     g.fillRect(0, 0, this.W, this.H);
-    const cellZ = 2.0,
-      cellLat = 0.22;
+    const cellZ = 2.6,
+      cellLat = 0.5;
     const cam = this.camX;
     const off = this.e.state.dist % cellZ;
-    for (let zi = -4; zi < 90; zi++) {
+    for (let zi = -10; zi < 180; zi++) {
       const z = zi * cellZ - off;
       const p = this.proj(z);
       if (p < 0.055) break;
@@ -355,10 +351,10 @@ export class Renderer {
         if (hi <= lo) continue;
         for (let k = Math.floor(lo / cellLat); k <= Math.floor(hi / cellLat); k++) {
           const r = seedRand(row * 7919 + k * 131)();
-          if (r > 0.2) continue;
-          const tint = r < 0.11 ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.065)";
+          if (r > 0.62) continue;
+          const tint = r < 0.3 ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.075)";
           const latA = Math.max(lo, k * cellLat);
-          const latB = Math.min(hi, k * cellLat + cellLat * (0.7 + r * 3));
+          const latB = Math.min(hi, k * cellLat + cellLat * (0.75 + r * 0.6));
           if (latB > latA) this.quad(latA, latB, z, z + cellZ * 0.92, tint);
         }
       }
@@ -368,17 +364,18 @@ export class Renderer {
   // Roadside wall: brown block face with a darker base and sparse seams, light
   // gray top. Faces are planar, so one quad each projects correctly.
   private wall(latIn: number, latOut: number) {
-    const iA = this.pt(latIn, Z0, 0), iB = this.pt(latIn, Z_FAR, 0);
-    const mA = this.pt(latIn, Z0, RAIL_H * 0.32), mB = this.pt(latIn, Z_FAR, RAIL_H * 0.32);
-    const tA = this.pt(latIn, Z0, RAIL_H), tB = this.pt(latIn, Z_FAR, RAIL_H);
-    const oA = this.pt(latOut, Z0, RAIL_H), oB = this.pt(latOut, Z_FAR, RAIL_H);
+    const zF = this.zf;
+    const iA = this.pt(latIn, Z0, 0), iB = this.pt(latIn, zF, 0);
+    const mA = this.pt(latIn, Z0, RAIL_H * 0.32), mB = this.pt(latIn, zF, RAIL_H * 0.32);
+    const tA = this.pt(latIn, Z0, RAIL_H), tB = this.pt(latIn, zF, RAIL_H);
+    const oA = this.pt(latOut, Z0, RAIL_H), oB = this.pt(latOut, zF, RAIL_H);
     this.poly([iA, iB, mB, mA], "#493f35");
     this.poly([mA, mB, tB, tA], "#635a4c");
     const seamZ = 7.5;
     const off = this.e.state.dist % seamZ;
-    for (let k = 0; k < 30; k++) {
+    for (let k = 0; k < 80; k++) {
       const z = k * seamZ - off + Z0;
-      if (z > Z_FAR || this.proj(z) < 0.07) break;
+      if (z > this.zf || this.proj(z) < 0.07) break;
       const a = this.pt(latIn, z, 0), b = this.pt(latIn, z + 0.12, 0);
       const c = this.pt(latIn, z + 0.12, RAIL_H), d = this.pt(latIn, z, RAIL_H);
       this.poly([a, b, c, d], "#3a352e");
@@ -401,16 +398,18 @@ export class Renderer {
   }
 
   private drawRoad() {
-    this.quad(ROAD_L, ROAD_R, Z0, Z_FAR, ASPHALT);
+    this.quad(ROAD_L, ROAD_R, Z0, this.zf, ASPHALT);
   }
 
   // Boundary dashes plus the neon cashout edge, which runs slightly diagonal
   // (nearer the player at low z) the way the capture's exit edge does.
   private drawMarkings() {
     const g = this.ctx;
-    const latG = (z: number) => GREEN_LAT0 + GREEN_SLOPE * z;
+    // the diagonal drift was fitted over the first ~90 z; past that the
+    // reference line runs straight, so the slope saturates
+    const latG = (z: number) => GREEN_LAT0 + GREEN_SLOPE * Math.min(z, 90);
     const seg = (hw: number, fill: string) => {
-      for (let z = Z0; z < 100; z += 5) {
+      for (let z = Z0; z < this.zf; z += 5) {
         const z2 = z + 5.3;
         if (this.proj(z) < 0.08) break;
         this.poly(
@@ -425,9 +424,14 @@ export class Renderer {
     g.globalAlpha = 1;
     seg(GREEN_HW * 0.8, "#5aff28");
     g.restore();
+    // starting line: two pale bands parked at world z ≈ 25, gone after GO
+    for (const zl of [26.6, 24.9]) {
+      const z = zl - this.e.state.dist;
+      if (z > Z0 && z < 60) this.quad(ROAD_L, ROAD_R, z, z + 0.85, "rgba(235,235,235,0.5)");
+    }
     const off = this.e.state.dist % DASH_PERIOD;
     for (const b of [0.5, 1.5, 2.5]) {
-      for (let zi = -2; zi < 18; zi++) {
+      for (let zi = -3; zi < 60; zi++) {
         const z = zi * DASH_PERIOD - off;
         const za = Math.max(Z0, z),
           zb = z + DASH_LEN;
@@ -473,6 +477,17 @@ export class Renderer {
       t.restore();
     }
     this.cashTex = cv;
+    // quarter-res mip, shrunk in two stages: Chrome's drawImage skips proper
+    // filtering at extreme ratios, which shatters the far letter repeats
+    const half = document.createElement("canvas");
+    half.width = C.texW / 2;
+    half.height = C.texH / 2;
+    half.getContext("2d")!.drawImage(cv, 0, 0, half.width, half.height);
+    const quarter = document.createElement("canvas");
+    quarter.width = C.texW / 4;
+    quarter.height = C.texH / 4;
+    quarter.getContext("2d")!.drawImage(half, 0, 0, quarter.width, quarter.height);
+    this.cashTexSmall = quarter;
     this.cashTexReal = real;
   }
 
@@ -487,14 +502,25 @@ export class Renderer {
     const off = this.e.state.dist % C.period;
     const lat0 = C.latC - C.latHalf;
     const lat1 = C.latC + C.latHalf;
-    for (let zi = 0; zi < 4; zi++) {
+    for (let zi = 0; zi < 8; zi++) {
       const z0 = zi * C.period - off + 4;
+      if (z0 > this.zf) break;
       const z1 = z0 + wordLen;
       const zNear = Math.max(z0, this.zOf(this.H));
-      const zFar = Math.min(z1, 100);
+      const zFar = Math.min(z1, this.zf - 2);
       if (zFar <= zNear) continue;
       const yA = Math.max(0, Math.ceil(this.sy(zFar)));
       const yB = Math.min(this.H, Math.floor(this.sy(zNear)));
+      // a distant repeat spans few rows; one smoothed blit of the mip beats
+      // per-strip sampling there
+      if (yB - yA < 28 && this.cashTexSmall) {
+        const p = this.proj((zNear + zFar) / 2);
+        const x0 = this.sx(lat0, p);
+        const sy0 = ((z1 - zFar) / wordLen) * this.cashTexSmall.height;
+        const sh = ((zFar - zNear) / wordLen) * this.cashTexSmall.height;
+        g.drawImage(this.cashTexSmall, 0, sy0, this.cashTexSmall.width, sh, x0, yA, this.sx(lat1, p) - x0, yB - yA);
+        continue;
+      }
       for (let y = yA; y < yB; y += 2) {
         const za = this.zOf(y);
         const zb = this.zOf(Math.min(y + 2, yB));
@@ -507,41 +533,56 @@ export class Renderer {
     }
   }
 
-  // Lane 0 is the rainbow lane: a world-anchored hue sweep along z (orange at
-  // the player's row rolling to magenta far out), with a wide soft glow.
-  private drawRainbow() {
+  /*
+   * Lane 0 is the rainbow lane. The reference sweep runs ~one full hue cycle
+   * over the visible depth and the whole gradient cycles hue with TIME
+   * (~96°/s), even while the road is frozen at READY; it is not locked to
+   * distance travelled. A wide soft glow spills over the rail onto the desert.
+   */
+  private rainbowGrad(): { grad: CanvasGradient; yBot: number; yTop: number } {
     const g = this.ctx;
-    const zTop = 95,
-      zBot = -5;
+    const zTop = this.zf * 0.97,
+      zBot = Z0;
     const yBot = this.sy(zBot),
       yTop = this.sy(zTop);
     const grad = g.createLinearGradient(0, yBot, 0, yTop);
-    // stops uniform in screen y, so the sweep stays smooth near the viewer
     const stops = 44;
     for (let k = 0; k <= stops; k++) {
       const y = yBot + (yTop - yBot) * (k / stops);
       const z = this.zOf(y);
-      const hue = ((20 + 4.2 * (z + this.e.state.dist)) % 360 + 360) % 360;
-      grad.addColorStop(k / stops, "hsl(" + hue + ",100%,52%)");
+      const hue = ((20 + 2.6 * z + 0.096 * this.nowMs) % 360 + 360) % 360;
+      grad.addColorStop(k / stops, "hsl(" + hue + ",90%,55%)");
     }
-    const band = (latA: number, latB: number, blur: number, alpha: number) => {
-      const pa = this.proj(zBot),
-        pb = this.proj(zTop);
-      g.save();
-      g.filter = "blur(" + blur + "px)";
-      g.globalAlpha = alpha;
-      g.fillStyle = grad;
-      g.beginPath();
-      g.moveTo(this.sx(latA, pa), yBot);
-      g.lineTo(this.sx(latA, pb), yTop);
-      g.lineTo(this.sx(latB, pb), yTop);
-      g.lineTo(this.sx(latB, pa), yBot);
-      g.closePath();
-      g.fill();
-      g.restore();
-    };
-    band(-0.72, 0.72, 7, 0.3);
-    band(ROAD_L, 0.5, 2, 1);
+    return { grad, yBot, yTop };
+  }
+
+  private rainbowBand(latA: number, latB: number, blur: number, alpha: number) {
+    const g = this.ctx;
+    const { grad, yBot, yTop } = this.rainbowGrad();
+    const pa = this.proj(this.zOf(yBot)),
+      pb = this.proj(this.zOf(yTop));
+    g.save();
+    g.filter = "blur(" + blur + "px)";
+    g.globalAlpha = alpha;
+    g.fillStyle = grad;
+    g.beginPath();
+    g.moveTo(this.sx(latA, pa), yBot);
+    g.lineTo(this.sx(latA, pb), yTop);
+    g.lineTo(this.sx(latB, pb), yTop);
+    g.lineTo(this.sx(latB, pa), yBot);
+    g.closePath();
+    g.fill();
+    g.restore();
+  }
+
+  private drawRainbow() {
+    this.rainbowBand(ROAD_L, 0.44, 2, 1);
+  }
+
+  // painted after the walls so the glow tints the rail and the desert beyond
+  private drawRainbowGlow() {
+    this.rainbowBand(-1.9, 0.66, 22, 0.3);
+    this.rainbowBand(-0.7, 0.47, 4, 0.2);
   }
 
   /**
@@ -669,7 +710,7 @@ export class Renderer {
   private drawTraffic(c: Car) {
     const g = this.ctx;
     const col = CAR_COLORS[c.col || 0];
-    const fade = Math.min(1, Math.max(0, (this.e.cfg.spawnZ - c.z) / 6));
+    const fade = Math.min(1, Math.max(0, (this.e.spawnHorizon() - c.z) / 6));
     g.save();
     g.globalAlpha = fade;
     this.drawCar(c.lane, c.z, 0, col, false);
@@ -823,13 +864,13 @@ export class Renderer {
     };
     const pay = cfg.entryFee * this.e.multiplier() * rollF;
     const payTxt = pay < 0.005 ? "$0" : "$" + pay.toFixed(2);
-    shadow(payTxt, this.W / 2, 111, 64);
-    this.otext(payTxt, this.W / 2, 111, 64, "#ffffff");
+    shadow(payTxt, this.W / 2, 107, 58);
+    this.otext(payTxt, this.W / 2, 107, 58, "#ffffff");
 
     const scoreTxt = "SCORE: " + Math.floor(s.score * rollF).toLocaleString("en-US");
-    shadow(scoreTxt, this.W / 2, 139, 15);
-    this.otext(scoreTxt, this.W / 2, 139, 15, "#ffffff", "#2d2d2d", 2.5);
-    this.slashZeros(scoreTxt, this.W / 2, 139, 15);
+    shadow(scoreTxt, this.W / 2, 139, 17);
+    this.otext(scoreTxt, this.W / 2, 139, 17, "#ffffff", "#2d2d2d", 2.5);
+    this.slashZeros(scoreTxt, this.W / 2, 139, 17);
 
     // during READY the reference shows a 1X placeholder, not the lane's mult
     const mult = s.phase === "countdown" ? 1 : cfg.laneMult[s.lane];
@@ -839,11 +880,11 @@ export class Renderer {
         g.save();
         g.shadowColor = `hsl(${(this.nowMs * 0.12) % 360},95%,60%)`;
         g.shadowBlur = 16;
-        this.otext(mTxt, this.W / 2, 187, 52, "#262626", "#f2f2f2", 8);
+        this.otext(mTxt, this.W / 2, 185, 50, "#1d1d1d", "#f2f2f2", 6);
         g.restore();
       }
-      shadow(mTxt, this.W / 2, 187, 52);
-      this.otext(mTxt, this.W / 2, 187, 52, "#262626", "#f2f2f2", 8);
+      shadow(mTxt, this.W / 2, 185, 50);
+      this.otext(mTxt, this.W / 2, 185, 50, "#1d1d1d", "#f2f2f2", 6);
     }
     if (s.cashTimer > 0) {
       const frac = Math.min(1, s.cashTimer / cfg.cashHold);
@@ -879,12 +920,139 @@ export class Renderer {
     }
   }
 
+  /*
+   * Start-screen furniture, matched to the reference: a SOUND/MUSIC/HAPTICS
+   * toggle row up top, a gray glyph above each instruction block, mixed-case
+   * Luckiest Guy copy (its lowercase renders as small caps), TAP TO START.
+   */
   private drawStartScreen() {
-    this.otext("SWIPE LEFT/RIGHT", this.W / 2, 334, 30, "#ffffff", "#1c1c1c", 7);
-    this.otext("TO CHANGE LANES", this.W / 2, 366, 30, "#ffffff", "#1c1c1c", 7);
-    this.otext("USE CASHOUT LANE", this.W / 2, 508, 30, "#ffffff", "#1c1c1c", 7);
-    this.otext("TO KEEP YOUR SCORE", this.W / 2, 540, 30, "#ffffff", "#1c1c1c", 7);
-    this.otext("TAP TO START", this.W / 2, 806, 52, "#f2e42a", "#1c1c1c", 11);
+    const g = this.ctx;
+    const YELLOW = "#f2e42a";
+
+    const label = (txt: string, cx: number) => {
+      g.font = "12px " + FONT;
+      g.textAlign = "center";
+      g.fillStyle = "rgba(20,20,20,0.8)";
+      g.fillText(txt, cx + 1, 138);
+      g.fillStyle = "#ffffff";
+      g.fillText(txt, cx, 137);
+    };
+    const icon = (cx: number, draw: () => void) => {
+      g.save();
+      g.fillStyle = YELLOW;
+      g.strokeStyle = YELLOW;
+      g.translate(cx, 103);
+      g.scale(1.4, 1.4);
+      g.translate(-cx, -103);
+      draw();
+      g.restore();
+    };
+    icon(76, () => {
+      // speaker
+      g.beginPath();
+      g.moveTo(60, 100);
+      g.lineTo(66, 100);
+      g.lineTo(74, 92);
+      g.lineTo(74, 116);
+      g.lineTo(66, 108);
+      g.lineTo(60, 108);
+      g.closePath();
+      g.fill();
+      g.lineWidth = 2.6;
+      for (const r of [6, 11]) {
+        g.beginPath();
+        g.arc(76, 104, r, -0.85, 0.85);
+        g.stroke();
+      }
+    });
+    icon(202, () => {
+      // music note
+      g.beginPath();
+      g.ellipse(196, 113, 5.5, 4, -0.3, 0, Math.PI * 2);
+      g.fill();
+      g.fillRect(200, 90, 3, 22);
+      g.beginPath();
+      g.moveTo(200, 90);
+      g.quadraticCurveTo(210, 92, 209, 101);
+      g.quadraticCurveTo(207, 95, 200, 95);
+      g.closePath();
+      g.fill();
+    });
+    icon(326, () => {
+      // haptics phone with side arcs
+      g.beginPath();
+      g.roundRect(319, 92, 14, 24, 4);
+      g.fill();
+      g.lineWidth = 2.6;
+      for (const [cx, a0, a1] of [
+        [313, Math.PI * 0.6, Math.PI * 1.4],
+        [339, -Math.PI * 0.4, Math.PI * 0.4],
+      ] as [number, number, number][]) {
+        for (const r of [5, 9]) {
+          g.beginPath();
+          g.arc(cx, 104, r, a0, a1);
+          g.stroke();
+        }
+      }
+    });
+    label("SOUND", 73);
+    label("MUSIC", 200);
+    label("HAPTICS", 326);
+
+    // swipe glyph: two block arrows, left over right
+    const arrow = (cy: number, dir: number) => {
+      g.save();
+      g.fillStyle = "#b9b9b9";
+      g.shadowColor = "rgba(0,0,0,0.45)";
+      g.shadowOffsetX = 2;
+      g.shadowOffsetY = 3;
+      g.beginPath();
+      const x0 = this.W / 2 - 22 * dir,
+        x1 = this.W / 2 + 22 * dir;
+      g.moveTo(x0, cy - 4);
+      g.lineTo(x1 - 9 * dir, cy - 4);
+      g.lineTo(x1 - 9 * dir, cy - 9);
+      g.lineTo(x1, cy);
+      g.lineTo(x1 - 9 * dir, cy + 9);
+      g.lineTo(x1 - 9 * dir, cy + 4);
+      g.lineTo(x0, cy + 4);
+      g.closePath();
+      g.fill();
+      g.restore();
+    };
+    arrow(263, -1);
+    arrow(283, 1);
+
+    // fork glyph: straight stub plus a branch curving right, arrowhead on top
+    g.save();
+    g.strokeStyle = "#b9b9b9";
+    g.fillStyle = "#b9b9b9";
+    g.shadowColor = "rgba(0,0,0,0.45)";
+    g.shadowOffsetX = 2;
+    g.shadowOffsetY = 3;
+    g.lineWidth = 9;
+    g.lineCap = "round";
+    g.beginPath();
+    g.moveTo(188, 458);
+    g.lineTo(188, 412);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(202, 458);
+    g.quadraticCurveTo(205, 424, 221, 412);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(213, 403);
+    g.lineTo(233, 397);
+    g.lineTo(228, 418);
+    g.closePath();
+    g.fill();
+    g.restore();
+
+    this.otext("Swipe left/right", this.W / 2, 325, 25, "#ffffff", "#1c1c1c", 6);
+    this.otext("to change lanes", this.W / 2, 349, 25, "#ffffff", "#1c1c1c", 6);
+    this.otext("Use cashout lane", this.W / 2, 489, 25, "#ffffff", "#1c1c1c", 6);
+    this.otext("to keep your score", this.W / 2, 513, 25, "#ffffff", "#1c1c1c", 6);
+    this.otext("TAP TO START", this.W / 2, 775, 52, YELLOW, "#1c1c1c", 11);
   }
 }
 

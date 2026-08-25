@@ -47,8 +47,8 @@ describe("fair-course property", () => {
     // can be compared frame-for-frame over a long window
     const cfg = mergeConfig(DEFAULT_CONFIG, {
       game: {
-        hitHalfWidth: 0.01,
-        hitHalfLength: 0.01,
+        hitHalfWidth: 0,
+        hitHalfLength: 0,
         barrierFreq: 0,
       },
     }).game;
@@ -89,7 +89,7 @@ describe("fair-course property", () => {
   test("playRun is deterministic and course-seeded", () => {
     const cfg = mergeConfig(DEFAULT_CONFIG, {
       mode: "generative",
-      bot: { noise: { model: "organic" }, cashout: { target: 2600 } },
+      bot: { noise: { model: "organic" }, cashout: { target: 2200 } },
       seed: 99,
     });
     const one = playRun(cfg, 12345);
@@ -233,22 +233,23 @@ describe("modeled field", () => {
           rtMean: 420 - 55 * z,
           rtSd: 95 - 12 * z,
           errorRate: Math.max(0, 0.14 - 0.045 * z),
-          cashTarget: 2600,
+          cashTarget: 2200,
         },
         4242
       );
     const banked = (z: number) => {
       let n = 0;
-      for (let c = 0; c < 60; c++) if (playRun(cfgFor(z), 5000 + c).banked > 0) n++;
-      return n / 60;
+      for (let c = 0; c < 200; c++) if (playRun(cfgFor(z), 5000 + c).banked > 0) n++;
+      return n / 200;
     };
-    // averaged over 60 shared courses, the strong draw banks more often
+    // averaged over 200 shared courses (banking is rare on the video-fitted
+    // course, so small samples are noise), the strong draw banks more often
     expect(banked(2)).toBeGreaterThan(banked(-2));
   });
 });
 
 describe("cashout policy", () => {
-  const run = (target: number | null, courses = 80) => {
+  const run = (target: number | null, courses = 240) => {
     const cfg = mergeConfig(DEFAULT_CONFIG, {
       mode: "generative",
       hwInject: true,
@@ -262,14 +263,16 @@ describe("cashout policy", () => {
   };
 
   test("a bank target makes the bot actually bank; null is the legacy drift", () => {
+    // the video-fitted course kills most runs before any target, so the pin is
+    // a ratio plus a floor rather than a fixed absolute gap
     const never = run(null);
-    const eager = run(2600);
-    expect(eager).toBeGreaterThan(never + 0.1);
+    const eager = run(2200);
+    expect(eager).toBeGreaterThan(Math.max(never * 3, 0.08));
   });
 
   test("greed is a real trade-off, not a free win", () => {
     // pushing for a bigger multiplier means banking less often
-    expect(run(2600)).toBeGreaterThan(run(9800));
+    expect(run(2200)).toBeGreaterThan(run(9800));
   });
 
   test("the default config banks nothing on purpose", () => {
@@ -284,7 +287,7 @@ describe("execution error", () => {
       const cfg = mergeConfig(DEFAULT_CONFIG, {
         mode: "generative",
         seed: 777,
-        bot: { noise: { model: "organic" }, cashout: { target: 2600 }, skill: { errorRate } },
+        bot: { noise: { model: "organic" }, cashout: { target: 2200 }, skill: { errorRate } },
       });
       let n = 0;
       for (let c = 0; c < 80; c++) if (playRun(cfg, 6000 + c).banked > 0) n++;
@@ -297,15 +300,15 @@ describe("execution error", () => {
 describe("shipped stealth preset", () => {
   test("banks like a human rather than never banking", () => {
     const preset = PRESETS.find((p) => p.id === "stealth-camouflage")!;
-    expect(preset.config.bot?.cashout?.target).toBe(2600);
+    expect(preset.config.bot?.cashout?.target).toBe(2200);
     const cfg = mergeConfig(DEFAULT_CONFIG, { ...preset.config, seed: 4242 });
     let banked = 0;
-    const courses = 60;
+    const courses = 240;
     for (let c = 0; c < courses; c++)
       if (playRun(cfg, 900_000 + c * 31).banked > 0) banked++;
     // the whole point of the change: it cashes out on a real fraction of runs
-    // (the video-fitted course is brutal; the never-bank baseline is 0.05)
-    expect(banked / courses).toBeGreaterThan(0.1);
+    // (measured 0.13 over 300 courses; the never-bank drift is 0.025)
+    expect(banked / courses).toBeGreaterThan(0.08);
   });
 
   test("it wins more head-to-head than it loses against a modeled field", () => {

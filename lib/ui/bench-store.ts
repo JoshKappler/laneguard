@@ -152,3 +152,8 @@ class BenchStore {
 }
 
 export const benchStore = new BenchStore();
+
+// capture/debug handle for driving the bench from automation
+if (typeof window !== "undefined") {
+  (window as unknown as { __lgBench: BenchStore }).__lgBench = benchStore;
+}

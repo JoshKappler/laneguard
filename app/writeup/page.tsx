@@ -165,17 +165,18 @@ export default function Writeup() {
       <Table
         head={["attacker", "verdict @180s", "ever SUSP", "ever BOT", "conf", "t→BOT", "jitter", "Δ⁴/Δ²", "RT floor"]}
         rows={[
-          ["naive scripted", "BOT 100%", "0/12", "12/12", "0.75", "15 s", "0.00", "0.00", "119 ms"],
-          ["replay farm (injected)", "BOT 100%", "1/12", "12/12", "0.75", "23 s", "1.81", "2.28", "50 ms"],
-          ["evasive generative", "BOT 8%", "11/12", "8/12", "0.51", "57 s *", "1.63", "1.76", "54 ms"],
-          ["stealth camouflage", "HUMAN 12/12", "0/12", "0/12", "0.06", "never", "1.62", "1.75", "231 ms"],
+          ["naive scripted", "BOT 100%", "0/12", "12/12", "0.75", "16 s", "0.00", "0.00", "60 ms"],
+          ["replay farm (injected)", "BOT 100%", "0/12", "12/12", "0.75", "26 s", "1.82", "2.28", "68 ms"],
+          ["evasive generative", "BOT 8%", "12/12", "6/12", "0.51", "54 s *", "1.63", "1.74", "62 ms"],
+          ["stealth camouflage", "HUMAN 11/12", "1/12", "0/12", "0.10", "never", "1.62", "1.75", "229 ms"],
         ]}
         hot={(r, c) => r === 3 && c === 3}
       />
       <P dim>
-        * median over the eight seeds that reached BOT at all, not over all twelve. The evasive bot
-        <em> ends</em> the session called BOT on 8% of seeds but touches BOT on 67% and SUSPECT on
-        92%. Reading the final verdict alone understates the detector.
+        * median over the six seeds that reached BOT at all, not over all twelve. The evasive bot
+        <em> ends</em> the session called BOT on 8% of seeds but touches SUSPECT on every seed and
+        BOT on half. Reading the final verdict alone understates the detector. The stealth bot
+        grazes SUSPECT once in twelve (behavior texture, ~143 s in) and never reaches BOT.
       </P>
       <P>
         The evasive generative bot defeats every swipe-level motor-forensics signal by modeling human
@@ -205,24 +206,25 @@ export default function Writeup() {
       <Table
         head={["attacker", "verdict @600s", "ever SUSP", "ever BOT", "conf", "t→BOT"]}
         rows={[
-          ["evasive generative", "SUSPECT 100%", "12/12", "9/12", "0.50", "57 s"],
-          ["stealth camouflage", "HUMAN 12/12", "0/12", "0/12", "0.06", "never"],
+          ["evasive generative", "SUSPECT 100%", "12/12", "6/12", "0.50", "54 s"],
+          ["stealth camouflage", "HUMAN 12/12", "1/12", "0/12", "0.04", "never"],
         ]}
         hot={(r, c) => r === 1 && c === 3}
       />
       <P>
-        This is the result worth reading. The detector gets the evasive bot fast (a median 57&nbsp;s
-        to the first BOT touch) and never lets go: every seed sits pinned at SUSPECT for as long as
-        the session runs, because the impossible-RT artifact keeps recurring. The stealth rung
-        breaks that trend. It sits at 0/12 however long the session runs, with confidence flat at
-        0.06, because the session-level signals need volume and this attacker supplies human-shaped
-        volume. Below T3, time is the defender&apos;s ally; at T3 it stops helping.
+        This is the result worth reading. The detector gets the evasive bot inside a minute (a
+        median 54&nbsp;s to the first BOT touch) and never lets go: every seed sits pinned at
+        SUSPECT for as long as the session runs, because the impossible-RT artifact keeps
+        recurring. The stealth rung breaks that trend. It sits at 0/12 ever-BOT however long the
+        session runs, with confidence flat at 0.04, and its one transient SUSPECT graze decays
+        back to HUMAN, because the session-level signals need volume and this attacker supplies
+        human-shaped volume. Below T3, time is the defender&apos;s ally; at T3 it stops helping.
       </P>
       <P>
-        On the wider 40-seed sweep the stealth attacker never so much as grazes SUSPECT.
-        &ldquo;Invisible&rdquo; is still too strong a word for a claim built on 40 seeds; the
-        precise statement is that the client-side detector never gets enough to act on. That is
-        the ceiling of client-side behavioral detection.
+        The wider 40-seed sweep reads the same: the stealth attacker grazes SUSPECT on 1 of 40
+        seeds and never reaches BOT. &ldquo;Invisible&rdquo; was never the claim; the precise
+        statement is that the client-side detector never gets enough to act on. That is the
+        ceiling of client-side behavioral detection.
       </P>
 
       <H n="03">The seven signals</H>
@@ -410,10 +412,10 @@ export default function Writeup() {
         fingerprinting are described, not built.
       </P>
       <P>
-        Two more worth stating plainly. <strong>The stealth clean sheet is 40 seeds wide, not
-        infinite</strong>: 0 of 40 seeds ever touch SUSPECT on the video-fitted build (the pre-refit
-        build grazed 2 of 40), which bounds the false-negative rate rather than proving invisibility
-        against a review queue fed by more traffic. And every attacker number on this page is
+        Two more worth stating plainly. <strong>The stealth no-action sheet is 40 seeds wide, not
+        infinite</strong>: 1 of 40 seeds grazes SUSPECT and 0 of 40 ever reach BOT on the
+        video-fitted build (the pre-refit build grazed 2 of 40), which bounds the false-negative
+        rate rather than proving invisibility against a review queue fed by more traffic. And every attacker number on this page is
         measured over 180 or 600&nbsp;s of a <em>single account</em>; nothing here models an
         adversary who tunes against the detector over weeks, which a real one would.
       </P>

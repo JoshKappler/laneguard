@@ -24,7 +24,11 @@ export interface GameConfig {
   barrierFreq: number;
   /** probability a wave is a two-lane pair instead of a single car */
   pairFreq: number;
+  /** spawn/cull horizon (z) at base speed; scaled with zoom so spawns stay
+      past the frame top as the ground plane zooms out */
   spawnZ: number;
+  /** ground-plane zoom-out per speed unit over base (renderer + horizon) */
+  zoomK: number;
   /** seconds of time-to-impact at which a blocking car becomes a threat */
   threatWindow: number;
   /** px of horizontal travel that commits a swipe */
@@ -295,15 +299,16 @@ export const DEFAULT_CONFIG: BenchConfig = {
     baseSpeed: 50,
     maxSpeed: 120,
     speedRamp: 0.9,
-    waveGapStart: 34,
-    waveGapMin: 24,
+    waveGapStart: 24,
+    waveGapMin: 16,
     waveGapRamp: 0.09,
-    densityStart: 0.75,
+    densityStart: 0.95,
     densityMax: 1.0,
-    densityRamp: 0.005,
-    barrierFreq: 0.1,
-    pairFreq: 0.1,
-    spawnZ: 105,
+    densityRamp: 0.002,
+    barrierFreq: 0.5,
+    pairFreq: 0.12,
+    spawnZ: 215,
+    zoomK: 0.00564,
     threatWindow: 1.15,
     swipeThreshold: 28,
     maxSteer: 0.475,
@@ -314,7 +319,7 @@ export const DEFAULT_CONFIG: BenchConfig = {
     hitboxShrinkAngle: 0.35,
     cashHold: 1.6,
     entryFee: 3.01,
-    scorePerZ: 0.52,
+    scorePerZ: 0.5,
     payout: [
       [0, 0], [1350, 0], [2050, 0.004], [2350, 0.013], [2750, 0.023],
       [3200, 0.043], [3600, 0.08], [3950, 0.136], [4350, 0.243], [4500, 0.3],
@@ -322,8 +327,8 @@ export const DEFAULT_CONFIG: BenchConfig = {
       [5582, 1.289], [8497, 1.289], [8933, 1.63], [9192, 1.97],
       [9436, 2.31], [9757, 2.66], [10084, 3.0],
     ],
-    introMs: 1650,
-    barrierPairFreq: 0.3,
+    introMs: 2400,
+    barrierPairFreq: 0.4,
   },
   bot: {
     rt: { family: "gaussian", mean: 235, sd: 42, tau: 80, floor: 150 },
@@ -656,7 +661,7 @@ export const PRESETS: Preset[] = [
          * needs. Banking at all also retires the "never banks a run" texture
          * flag. (Supersedes the pre-video `pnpm evo` sweep's bank@30.)
          */
-        cashout: { target: 2600 },
+        cashout: { target: 2200 },
       },
     },
   },

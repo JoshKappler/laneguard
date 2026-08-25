@@ -125,6 +125,22 @@ export class Engine {
       bankedTotal: 0,
     };
     this.input = new InputPipeline(this);
+    // the reference start screen already shows traffic far up the road
+    this.populateRoad();
+  }
+
+  /** spawn z, scaled with the ground-plane zoom so cars enter past the frame top */
+  spawnHorizon(): number {
+    const over = Math.max(0, this.state.speed - this.cfg.baseSpeed);
+    return this.cfg.spawnZ * (1 + this.cfg.zoomK * over);
+  }
+
+  /** frozen pre-run traffic at mature-road density (road-frame wave spacing
+      is waveGap scaled by closing/baseSpeed, roughly half the trigger gap) */
+  private populateRoad() {
+    const s = this.state;
+    for (let z = this.spawnHorizon() - 6; z > 85; z -= s.waveGap * (0.25 + this.rng() * 0.55))
+      this.spawnWave(z);
   }
 
   /** payout as a multiple of the entry fee, from the video-fitted curve */
@@ -173,37 +189,39 @@ export class Engine {
     s.cashTimer = 0;
     s.phase = this.cfg.introMs > 0 ? "countdown" : "running";
     s.stateAt = this.now;
-    // the reference READY screen already shows frozen traffic up the road
-    for (let z = cfg.spawnZ - 6; z > 45; z -= s.waveGap * (0.45 + this.rng() * 1.75))
-      this.spawnWave(z);
+    this.populateRoad();
     return [this.ev("runStart", "info", "run started")];
   }
 
-  private spawnWave(zAt = this.cfg.spawnZ) {
+  private spawnWave(zAt = this.spawnHorizon()) {
     const s = this.state,
       cfg = this.cfg,
       rng = this.rng;
     // Reference wave mix: ~90% one car, ~10% a two-lane pair, never a wall,
-    // with traffic weighted toward the high-multiplier lanes and driving at
-    // roughly half road speed. Difficulty comes from the speed ramp.
-    const fWave = 0.46 + rng() * 0.18;
+    // with traffic weighted toward the high-multiplier lanes. Closing speed
+    // is near-constant across the run (video-fitted 12-23 z/s), so the f
+    // fraction rises toward 1 as the road ramps.
+    const cWave = 14 + rng() * 10;
     const mkCar = (lane: number): Car => ({
       lane,
       z: zAt + (rng() - 0.5) * 3,
-      f: Math.max(0.4, Math.min(0.78, fWave + (rng() - 0.5) * 0.06)),
+      f: Math.min(0.95, Math.max(0.4, 1 - (cWave + (rng() - 0.5) * 4) / Math.max(s.speed, cfg.baseSpeed))),
       col: (rng() * CAR_COLOR_COUNT) | 0,
       threatAt: 0,
       rtLogged: false,
       passed: false,
     });
+    // near-uniform lane weights with a mild tilt toward the 5X lane: the
+    // reference player's ~0.9 moves/s and long unbroken 5X stints bound the
+    // rainbow lane's traffic share at roughly 30%, not the mult-heavy skew
+    const w = (l: number) => 1 + cfg.laneMult[l] * 0.08;
     const pick = (excl: number) => {
       let tot = 0;
-      for (let l = 0; l < this.laneCount; l++)
-        if (l !== excl) tot += cfg.laneMult[l] + 0.35;
+      for (let l = 0; l < this.laneCount; l++) if (l !== excl) tot += w(l);
       let r = rng() * tot;
       for (let l = 0; l < this.laneCount; l++) {
         if (l === excl) continue;
-        r -= cfg.laneMult[l] + 0.35;
+        r -= w(l);
         if (r <= 0) return l;
       }
       return this.laneCount - 1;
@@ -211,14 +229,29 @@ export class Engine {
     if (rng() < s.density) {
       // bunched waves land close in z; cap the distinct lanes blocked inside
       // a car-length window so bunching never assembles an undodgeable wall
-      const bunched = new Set<number>();
+      const near = new Map<number, number>();
       for (const c of s.cars)
-        if (c.z > zAt - 10) bunched.add(c.lane);
+        if (c.z > zAt - 10) near.set(c.lane, (near.get(c.lane) ?? 0) + 1);
       let first = pick(-1);
-      if (bunched.size >= 2 && !bunched.has(first))
-        first = [...bunched][(rng() * bunched.size) | 0];
-      s.cars.push(mkCar(first));
-      if (rng() < cfg.pairFreq && bunched.size < 2) s.cars.push(mkCar(pick(first)));
+      let stackBack = 0;
+      let spawnCar = true;
+      if (near.size >= 2 && !near.has(first)) {
+        // convoys cap at two: the reference shows pairs, never long trains
+        const open = [...near.keys()].filter((l) => (near.get(l) ?? 0) < 2);
+        if (open.length) {
+          first = open[(rng() * open.length) | 0];
+          // stacked cars follow at a visible gap, never overlap their leader
+          stackBack = 6 + rng() * 8;
+        } else {
+          spawnCar = false;
+        }
+      }
+      if (spawnCar) {
+        const lead = mkCar(first);
+        lead.z += stackBack;
+        s.cars.push(lead);
+        if (rng() < cfg.pairFreq && near.size < 2) s.cars.push(mkCar(pick(first)));
+      }
 
       // Barrier trap on a lane boundary, never on the spawned car's escape
       // boundaries and never on the cashout boundary, so a dodge always exists.
@@ -228,13 +261,14 @@ export class Engine {
           if (b !== first - 1 && b !== first) options.push(b);
         if (options.length) {
           const pickB = (rng() * options.length) | 0;
-          const len = 6 + rng() * 14;
+          // the reference drops short single slabs, not walls
+          const len = 1.8 + rng() * 1.4;
           const z0 = zAt - s.waveGap * 0.55;
           s.barriers.push({ boundary: options[pickB], z0, z1: z0 + len });
           // the reference run shows flanking pairs on adjacent boundaries
           if (options.length > 1 && rng() < cfg.barrierPairFreq) {
             const other = options[(pickB + 1) % options.length];
-            s.barriers.push({ boundary: other, z0, z1: z0 + 6 + rng() * 8 });
+            s.barriers.push({ boundary: other, z0, z1: z0 + 1.8 + rng() * 1.4 });
           }
         }
       }
@@ -333,7 +367,9 @@ export class Engine {
 
       const dz = s.speed * dt;
       s.dist += dz;
-      s.zSinceWave += dz;
+      // wave clock runs in base-speed distance: the reference spawner holds a
+      // steady wave RATE while the road ramps (visible density stays flat)
+      s.zSinceWave += cfg.baseSpeed * dt;
       // score accrues with distance, scaled by the committed lane's multiplier
       s.score += dz * cfg.laneMult[s.lane] * cfg.scorePerZ;
       if (s.zSinceWave >= s.waveGap * s.gapJit) {

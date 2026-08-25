@@ -92,16 +92,16 @@ matters.
 | attacker | verdict at 180 s | ever SUSPECT | ever BOT | how it's caught (or not) |
 |---|---|---|---|---|
 | naive scripted | **BOT 100%** | 0/12 | **12/12** | kinematics (jitter ≈ 0) + event provenance, in seconds |
-| replay farm (injected) | **BOT 100%** | 1/12 | **12/12** | replay similarity — repeats in shape *and* timing |
-| evasive generative | BOT 8% | 11/12 | **8/12** | organic noise beats motor forensics; the impossible-RT artifact lands in ~1 min |
-| **stealth camouflage** | **HUMAN 12/12** | 0/12 | **0/12** | **never actioned by the client-side detector** |
+| replay farm (injected) | **BOT 100%** | 0/12 | **12/12** | replay similarity: repeats in shape *and* timing |
+| evasive generative | BOT 8% | 12/12 | **6/12** | organic noise beats motor forensics; the impossible-RT artifact lands in about a minute |
+| **stealth camouflage** | HUMAN 11/12 | 1/12 | **0/12** | **never reaches BOT; behavior texture grazes SUSPECT on one seed** |
 
 The stealth bot uses organic motor noise (pink 1/f + tremor + drift), ex-Gaussian
 reaction times gated to threat onset, deliberate imperfect play (it enters
 contested space and genuinely crashes for it, and fakes aborted gestures), and a
 human banking discipline. Banking changes two numbers at once: cashing out
 retires the "never banks a run" texture flag, and it made the attacker *better
-at winning* (head-to-head win rate 49.9% → 55.3% against the modeled field on
+at winning* (head-to-head win rate 47.6% → 53.2% against the modeled field on
 shared courses), because under the video-fitted payout any banked run beats a
 forfeit. A competent attacker looks **more** normal as it gets stronger, so
 better play is not itself a tell.
@@ -111,13 +111,15 @@ Three minutes doesn't separate the last two rungs, so run both to 10 minutes
 
 | attacker | verdict at 600 s | ever SUSPECT | ever BOT | mean conf |
 |---|---|---|---|---|
-| evasive generative | **SUSPECT 100%** | 12/12 | **9/12** | 0.50 |
-| **stealth camouflage** | **HUMAN 12/12** | 0/12 | **0/12** | **0.06** |
+| evasive generative | **SUSPECT 100%** | 12/12 | **6/12** | 0.50 |
+| **stealth camouflage** | **HUMAN 12/12** | 1/12 | **0/12** | **0.04** |
 
-The detector holds its grip on the evasive bot: a median 57 s to the first BOT
+The detector holds its grip on the evasive bot: a median 54 s to the first BOT
 touch, and every seed pinned at SUSPECT for as long as the session runs. The
-stealth rung breaks that trend: 0/12 however long it runs, with confidence flat
-at 0.06 while the session grows.
+stealth rung breaks that trend: 0/12 ever-BOT however long it runs, confidence
+flat at 0.04, and its one SUSPECT graze (behavior texture) decays back to
+HUMAN. The wider 40-seed sweep reads the same: 1/40 grazes SUSPECT, 0/40 ever
+reaches BOT.
 
 ## Why the economy wins
 

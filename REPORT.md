@@ -4,13 +4,17 @@ An analysis of how a real-money mobile skill game gets attacked, what a
 client-side behavioral detector can and cannot catch, and why the economics —
 not the motor forensics — are what actually bind a bot.
 
-> **Scope.** The game here is an *original simulation* built from
-> public App Store screenshots of the "Drive" game in the Triumph Arcade app.
-> Nothing in this project reverse-engineers, decompiles, inspects, or runs
-> against Triumph's real app or servers, and nothing here is usable as a cheat
-> against it. Every number below is produced by code in this repo that actually
-> ran; `pnpm batch` regenerates the tables. Where a threshold is a
-> first-principles prior rather than a value fitted to measured data, it says so.
+> **Scope.** The game here is an *original simulation* of the "Drive" game in
+> the Triumph Arcade app, frame-fitted to a screen recording of one full
+> session played on my own phone, plus my own screenshots and Triumph's public
+> marketing and App Store images (provenance in `references/MANIFEST.md`).
+> Projection, speed ramp, traffic mix, lane-change dynamics, scoring, and the
+> dollar payout curve are measured, not guessed. Nothing in this project
+> reverse-engineers, decompiles, inspects, or runs against Triumph's real app
+> or servers, and nothing here is usable as a cheat against it. Every number
+> below is produced by code in this repo that actually ran; `pnpm batch`
+> regenerates the tables. Where a threshold is a first-principles prior rather
+> than a value fitted to measured data, it says so.
 
 ---
 
@@ -52,11 +56,25 @@ whose hitbox shrinks while angled. That physics is what makes the *reaction
 times and dodge margins* the detector reads meaningful; a toy lane-swapper would
 not produce a realistic behavioral signal.
 
-The visual work is deliberate observation against the reference screenshots
-(`references/`, with provenance in `references/MANIFEST.md`): the soft blurred
-rainbow shoulder, the green rotated CASHOUT lettering, cartoon cars with a
-consistent light source, red barrier blocks, the crash smoke plume, and the HUD.
-It is a model of a threat, not a clone of a product.
+The visual and physical work is measured against the reference material
+(`references/`, with provenance in `references/MANIFEST.md`), primarily a
+frame-by-frame pass over a full recorded session: the projection and its
+speed-tracking zoom, the speed ramp, wave spacing and lane mix, near-constant
+traffic closing speeds, the scoring rate, the dollar payout curve read off the
+HUD point by point, the soft blurred rainbow shoulder, the green rotated
+CASHOUT lettering, cartoon cars with a consistent light source, red barrier
+blocks, the crash smoke plume, and the HUD. It is a model of a threat, not a
+clone of a product.
+
+The headline parity numbers, reference vs simulation:
+
+| quantity | reference (recording) | simulation |
+|---|---|---|
+| countdown, tap to GO | 2.46 s | 2.40 s |
+| score rate | 0.50 per z (per-badge medians 0.49-0.51) | 0.50 per z |
+| traffic closing speed | 12-23 z/s, near-constant across the speed ramp | 14-24 z/s |
+| barrier slabs in frame | 2.03 mean (blob count over the run) | 1.98 mean (same counter) |
+| dollar payout | HUD dollar series, read point by point | the same series as the interpolation table |
 
 ---
 
@@ -76,16 +94,16 @@ balance the moment either fires.
 
 | attacker | verdict at 180 s | ever SUSPECT | ever BOT | mean conf | median t→BOT | jitter | Δ⁴/Δ² | RT floor |
 |---|---|---|---|---|---|---|---|---|
-| naive scripted (T0) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 15 s | 0.00 px | 0.00 | 119 ms |
-| replay farm (T1, injected) | **BOT 100%** | 1/12 | **12/12** | 0.75 | 23 s | 1.81 px | 2.28 | 50 ms |
-| evasive generative (T2+) | BOT 8% | 11/12 | **8/12** | 0.51 | 57 s *(of the 8)* | 1.63 px | 1.76 | 54 ms |
-| **stealth camouflage (T3)** | **HUMAN 12/12** | 0/12 | **0/12** | **0.06** | never | 1.62 px | 1.75 | 231 ms |
+| naive scripted (T0) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 16 s | 0.00 px | 0.00 | 60 ms |
+| replay farm (T1, injected) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 26 s | 1.82 px | 2.28 | 68 ms |
+| evasive generative (T2+) | BOT 8% | 12/12 | **6/12** | 0.51 | 54 s *(of the 6)* | 1.63 px | 1.74 | 62 ms |
+| **stealth camouflage (T3)** | HUMAN 11/12 | 1/12 | **0/12** | **0.10** | never | 1.62 px | 1.75 | 229 ms |
 
-The two smoking-gun tiers skip SUSPECT entirely — escalation takes them straight
+The two smoking-gun tiers skip SUSPECT entirely: escalation takes them straight
 to BOT. The evasive bot is the interesting middle: it *ends* the session called
-BOT on only 8% of seeds, but it touches BOT at some point on 67% and SUSPECT on
-92%, so reading the final verdict alone understates the detector. Its median
-57 s time-to-BOT is a median over the eight seeds that got there, not over all
+BOT on only 8% of seeds, but it touches SUSPECT on every seed and BOT on half,
+so reading the final verdict alone understates the detector. Its median
+54 s time-to-BOT is a median over the six seeds that got there, not over all
 twelve. Its tell is the RT floor: a planner that moves the instant a plan forms
 gets credited physically impossible sub-100 ms "reactions" in dense traffic.
 
@@ -113,21 +131,23 @@ equal terms:
 
 | attacker | verdict at 600 s | ever SUSPECT | ever BOT | mean conf | median t→BOT |
 |---|---|---|---|---|---|
-| evasive generative (T2+) | **SUSPECT 100%** | 12/12 | **9/12** | 0.50 | 57 s *(of the 9)* |
-| **stealth camouflage (T3)** | **HUMAN 12/12** | 0/12 | **0/12** | **0.06** | never |
+| evasive generative (T2+) | **SUSPECT 100%** | 12/12 | **6/12** | 0.50 | 54 s *(of the 6)* |
+| **stealth camouflage (T3)** | **HUMAN 12/12** | 1/12 | **0/12** | **0.04** | never |
 
-This is the result worth reading. The detector gets the evasive bot fast (a
-median 57 s to the first BOT touch) and never lets go: every seed sits pinned
-at SUSPECT for as long as the session runs, because the impossible-RT artifact
-keeps recurring. The stealth rung is what breaks that trend: it sits at 0/12 no
-matter how long the session runs, with confidence flat at 0.06, because the
-session-level signals need volume and this attacker supplies human-shaped
-volume. Against everything below T3 time is the defender's ally; at T3 it
-stops helping.
+This is the result worth reading. The detector gets the evasive bot inside a
+minute (a median 54 s to the first BOT touch) and never lets go: every seed
+sits pinned at SUSPECT for as long as the session runs, because the
+impossible-RT artifact keeps recurring. The stealth rung is what breaks that
+trend: it sits at 0/12 ever-BOT no matter how long the session runs, with
+confidence flat at 0.04; its one transient SUSPECT graze decays back to HUMAN,
+because the session-level signals need volume and this attacker supplies
+human-shaped volume. Against everything below T3 time is the defender's ally;
+at T3 it stops helping.
 
-On these batch seeds the stealth attacker never so much as grazes SUSPECT.
-"Invisible" is still too strong a word for a claim built on 12 seeds; the
-precise statement: *the detector never gets enough to act on.*
+On these batch seeds the stealth attacker grazes SUSPECT once in twelve, at
+~143 s, on the behavior-texture signal; it never reaches BOT, and SUSPECT
+queues a review rather than acting on the account. "Invisible" was never the
+claim; the precise statement: *the detector never gets enough to act on.*
 
 That is the ceiling of client-side behavioral detection. What survives it is
 the economics, not a better forensic signal.
@@ -156,9 +176,9 @@ the signal separates humans from a given attacker class at all.
    produce (zero deaths over dozens of dodges; metronomic margins).
 6. **Behavior texture** — session habits automation skips: aborted gestures,
    entering contested space and *paying* for it, actually banking runs. Catches
-   T2+; **defeated by T3**, which manufactures all three (0 of 40 seeds flagged
-   in the wider sweep on the video-fitted build; the pre-refit build grazed 2
-   of 40 here, so this signal's residual grip is fragile either way).
+   T2+; **largely defeated by T3**, which manufactures all three. It keeps a
+   thin residual grip: 1 of 40 seeds grazes SUSPECT on the video-fitted build
+   (the pre-refit build grazed 2 of 40), and it never escalates past a review.
 7. **Event integrity** — synthetic-event provenance (`isTrusted`), coordinate
    granularity. Cheap to spoof at the OS level, so corroborating only — it goes
    to zero the moment hardware injection is simulated.
@@ -405,9 +425,9 @@ is ready and regenerates with a single command.
   demonstrates that the client-side signals are defeatable in principle by an
   attacker who models motor noise and reaction timing correctly; a real one
   would face device attestation this bench does not simulate.
-- **The stealth clean sheet is 40 seeds wide, not infinite.** On the
-  video-fitted build the stealth attacker never touches SUSPECT across the
-  40-seed sweep (the pre-refit build grazed it on 2 of 40). A claim built on 40
+- **The stealth no-action sheet is 40 seeds wide, not infinite.** On the
+  video-fitted build the stealth attacker grazes SUSPECT on 1 of 40 seeds and
+  never reaches BOT (the pre-refit build grazed 2 of 40). A claim built on 40
   deterministic seeds bounds the detector's false-negative rate; it does not
   prove invisibility against a review queue fed by more traffic.
 - **Every attacker/detector number here is measured at 180 s or 600 s of a
