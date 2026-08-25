@@ -26,8 +26,9 @@ const CAR_TAPER = 0.78; // nose width as a fraction of body width
 const ROAD_L = -0.5, ROAD_R = 4.15;
 const RAIL_W = 0.09, RAIL_H = 0.87;
 const DASH_PERIOD = 8.4, DASH_LEN = 4.0, DASH_HW = 0.016;
-// the neon cashout edge runs slightly diagonal: nearer the player at low z
-const GREEN_LAT0 = 2.76, GREEN_SLOPE = -0.006, GREEN_HW = 0.017;
+// the neon cashout edge is road-parallel paint: lat 2.60 with a barely-there
+// drift, measured across 12 reference frames (its screen lean is perspective)
+const GREEN_LAT0 = 2.6, GREEN_SLOPE = -0.0004, GREEN_HW = 0.017;
 
 const BAR_HALF_W = 0.068, BAR_HALF_L = 0.9, BAR_H = 1.0, BAR_PERIOD = 8.8;
 
@@ -41,7 +42,7 @@ const CAM_OMEGA = 14, CAM_ZETA = 0.5;
 const GOLD = { body: "#cda21a", dark: "#8a6c09", roof: "#ecc746", glass: "#0b0c10" };
 
 // road-space texture for the flat CASHOUT lettering
-const CASH = { word: "CASHOUT", slot: 4.6, period: 62, latHalf: 0.48, latC: 3.38, texW: 200, texH: 640, em: 215 };
+const CASH = { word: "CASHOUT", slot: 4.6, period: 62, latHalf: 0.48, latC: 3.17, texW: 200, texH: 640, em: 215 };
 
 export interface Particle {
   x: number; y: number; vx: number; vy: number;
@@ -405,9 +406,8 @@ export class Renderer {
   // (nearer the player at low z) the way the capture's exit edge does.
   private drawMarkings() {
     const g = this.ctx;
-    // the diagonal drift was fitted over the first ~90 z; past that the
-    // reference line runs straight, so the slope saturates
-    const latG = (z: number) => GREEN_LAT0 + GREEN_SLOPE * Math.min(z, 90);
+    // world-straight, so it projects screen-straight with no kink
+    const latG = (z: number) => GREEN_LAT0 + GREEN_SLOPE * z;
     const seg = (hw: number, fill: string) => {
       for (let z = Z0; z < this.zf; z += 5) {
         const z2 = z + 5.3;
@@ -512,13 +512,19 @@ export class Renderer {
       const yA = Math.max(0, Math.ceil(this.sy(zFar)));
       const yB = Math.min(this.H, Math.floor(this.sy(zNear)));
       // a distant repeat spans few rows; one smoothed blit of the mip beats
-      // per-strip sampling there
+      // per-strip sampling there. Sheared so it keeps the road's convergence
+      // instead of arriving screen-vertical and snapping when it nears.
       if (yB - yA < 28 && this.cashTexSmall) {
-        const p = this.proj((zNear + zFar) / 2);
-        const x0 = this.sx(lat0, p);
+        const pF = this.proj(zFar), pN = this.proj(zNear);
+        const xTop = this.sx(lat0, pF), xBot = this.sx(lat0, pN);
+        const w = ((this.sx(lat1, pF) - xTop) + (this.sx(lat1, pN) - xBot)) / 2;
         const sy0 = ((z1 - zFar) / wordLen) * this.cashTexSmall.height;
         const sh = ((zFar - zNear) / wordLen) * this.cashTexSmall.height;
-        g.drawImage(this.cashTexSmall, 0, sy0, this.cashTexSmall.width, sh, x0, yA, this.sx(lat1, p) - x0, yB - yA);
+        g.save();
+        g.translate(xTop, yA);
+        g.transform(1, 0, (xBot - xTop) / (yB - yA), 1, 0, 0);
+        g.drawImage(this.cashTexSmall, 0, sy0, this.cashTexSmall.width, sh, 0, 0, w, yB - yA);
+        g.restore();
         continue;
       }
       for (let y = yA; y < yB; y += 2) {

@@ -251,6 +251,14 @@ in the simulator was re-fitted frame-by-frame against it:
   5,582, lobby tiers to 3.0x
 - HUD geometry (dollar/score/badge sizes and baselines, slashed zeros, the READY
   1X placeholder), READY/GO sequence timing, and the crash screen roll-down
+- traffic discipline (2026-08-25 pass over 12 frames spanning the run): the
+  cashout lane never carries a car, no lane holds more than two cars anywhere
+  in the approach field (roughly 5-6 cars visible at once), and same-lane cars
+  keep at least a car length of clear air
+- the neon cashout edge is road-parallel paint at lane-units 2.60 with a
+  barely-there drift (slope -0.0004 per z, fitted straight across every clean
+  frame; the earlier -0.006-then-saturate fit was a misread), with the CASHOUT
+  lettering hugging its right side (stroke band ~2.73-3.25 lane units)
 
 The fitted values live in `lib/core/config.ts` (game physics/payout) and
 `lib/ui/renderer.ts` (projection and drawing constants).

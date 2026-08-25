@@ -213,44 +213,52 @@ export class Engine {
     });
     // near-uniform lane weights with a mild tilt toward the 5X lane: the
     // reference player's ~0.9 moves/s and long unbroken 5X stints bound the
-    // rainbow lane's traffic share at roughly 30%, not the mult-heavy skew
+    // rainbow lane's traffic share at roughly 30%, not the mult-heavy skew.
+    // The cashout lane never carries traffic, like the reference.
     const w = (l: number) => 1 + cfg.laneMult[l] * 0.08;
     const pick = (excl: number) => {
       let tot = 0;
-      for (let l = 0; l < this.laneCount; l++) if (l !== excl) tot += w(l);
+      for (let l = 0; l < this.cashLane; l++) if (l !== excl) tot += w(l);
       let r = rng() * tot;
-      for (let l = 0; l < this.laneCount; l++) {
+      for (let l = 0; l < this.cashLane; l++) {
         if (l === excl) continue;
         r -= w(l);
         if (r <= 0) return l;
       }
-      return this.laneCount - 1;
+      return this.cashLane - 1;
     };
     if (rng() < s.density) {
-      // bunched waves land close in z; cap the distinct lanes blocked inside
-      // a car-length window so bunching never assembles an undodgeable wall
-      const near = new Map<number, number>();
+      // The reference never queues a lane: at most two cars share a lane
+      // anywhere in the approach field, so the field tops out around six.
+      const load = new Map<number, number>();
       for (const c of s.cars)
-        if (c.z > zAt - 10) near.set(c.lane, (near.get(c.lane) ?? 0) + 1);
+        if (c.z > 20) load.set(c.lane, (load.get(c.lane) ?? 0) + 1);
+      // bunched waves land close in z; track the distinct lanes blocked inside
+      // a car-length window so bunching never assembles an undodgeable wall
+      const nearWall = new Set<number>();
+      for (const c of s.cars) if (c.z > zAt - 10) nearWall.add(c.lane);
+      const canTake = (l: number) =>
+        (load.get(l) ?? 0) < 2 && (nearWall.size < 2 || nearWall.has(l));
       let first = pick(-1);
-      let stackBack = 0;
-      let spawnCar = true;
-      if (near.size >= 2 && !near.has(first)) {
-        // convoys cap at two: the reference shows pairs, never long trains
-        const open = [...near.keys()].filter((l) => (near.get(l) ?? 0) < 2);
-        if (open.length) {
-          first = open[(rng() * open.length) | 0];
-          // stacked cars follow at a visible gap, never overlap their leader
-          stackBack = 6 + rng() * 8;
-        } else {
-          spawnCar = false;
-        }
-      }
+      const spawnCar = canTake(first) || canTake((first = pick(first)));
+      // headway floor: a spawn never lands closer than a car length of clear
+      // air behind the newest car already in its lane
+      const clearOf = (car: Car) => {
+        for (const c of s.cars)
+          if (c.lane === car.lane && c.z > zAt - 45 && car.z < c.z + 2 * this.COLL_Z)
+            car.z = c.z + 2 * this.COLL_Z;
+      };
       if (spawnCar) {
         const lead = mkCar(first);
-        lead.z += stackBack;
+        clearOf(lead);
         s.cars.push(lead);
-        if (rng() < cfg.pairFreq && near.size < 2) s.cars.push(mkCar(pick(first)));
+        if (rng() < cfg.pairFreq && nearWall.size < 2) {
+          const mate = mkCar(pick(first));
+          if (canTake(mate.lane)) {
+            clearOf(mate);
+            s.cars.push(mate);
+          }
+        }
       }
 
       // Barrier trap on a lane boundary, never on the spawned car's escape
@@ -395,11 +403,11 @@ export class Engine {
       const pcx = s.x * cfg.lanePx;
 
       // traffic drives forward at its own speed; a faster follower matches
-      // the car ahead of it instead of rear-ending it
+      // the car ahead well before contact, holding a visible following gap
       for (const a of s.cars) {
         for (const b of s.cars) {
           if (a === b || a.lane !== b.lane || a.passed || b.passed) continue;
-          if (b.z > a.z && b.z - a.z < this.COLL_Z + 1.5 && b.f < a.f) b.f = a.f;
+          if (b.z > a.z && b.z - a.z < this.COLL_Z * 1.6 && b.f < a.f) b.f = a.f;
         }
       }
       let crashed = false;

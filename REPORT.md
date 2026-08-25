@@ -72,7 +72,9 @@ The headline parity numbers, reference vs simulation:
 |---|---|---|
 | countdown, tap to GO | 2.46 s | 2.40 s |
 | score rate | 0.50 per z (per-badge medians 0.49-0.51) | 0.50 per z |
+| score at 4.2 / 12.2 s of play | 499 / 1,428 | 528 / 1,507 (medians, 24 seeds) |
 | traffic closing speed | 12-23 z/s, near-constant across the speed ramp | 14-24 z/s |
+| traffic discipline | no car in the cashout lane, max 2 per lane in field, ~5-6 visible | same, enforced at spawn |
 | barrier slabs in frame | 2.03 mean (blob count over the run) | 1.98 mean (same counter) |
 | dollar payout | HUD dollar series, read point by point | the same series as the interpolation table |
 
@@ -94,18 +96,17 @@ balance the moment either fires.
 
 | attacker | verdict at 180 s | ever SUSPECT | ever BOT | mean conf | median t→BOT | jitter | Δ⁴/Δ² | RT floor |
 |---|---|---|---|---|---|---|---|---|
-| naive scripted (T0) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 16 s | 0.00 px | 0.00 | 60 ms |
-| replay farm (T1, injected) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 26 s | 1.82 px | 2.28 | 68 ms |
-| evasive generative (T2+) | BOT 8% | 12/12 | **6/12** | 0.51 | 54 s *(of the 6)* | 1.63 px | 1.74 | 62 ms |
-| **stealth camouflage (T3)** | HUMAN 11/12 | 1/12 | **0/12** | **0.10** | never | 1.62 px | 1.75 | 229 ms |
+| naive scripted (T0) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 14 s | 0.00 px | 0.00 | 81 ms |
+| replay farm (T1, injected) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 23 s | 1.82 px | 2.27 | 65 ms |
+| evasive generative (T2+) | BOT 50% | 9/12 | **9/12** | 0.56 | 51 s *(of the 9)* | 1.62 px | 1.76 | 64 ms |
+| **stealth camouflage (T3)** | HUMAN 12/12 | 0/12 | **0/12** | **0.08** | never | 1.62 px | 1.74 | 235 ms |
 
 The two smoking-gun tiers skip SUSPECT entirely: escalation takes them straight
-to BOT. The evasive bot is the interesting middle: it *ends* the session called
-BOT on only 8% of seeds, but it touches SUSPECT on every seed and BOT on half,
-so reading the final verdict alone understates the detector. Its median
-54 s time-to-BOT is a median over the six seeds that got there, not over all
-twelve. Its tell is the RT floor: a planner that moves the instant a plan forms
-gets credited physically impossible sub-100 ms "reactions" in dense traffic.
+to BOT. The evasive bot is the interesting middle: it touches SUSPECT and BOT
+on nine of twelve seeds, and its median 51 s time-to-BOT is a median over the
+nine seeds that got there, not over all twelve. Its tell is the RT floor: a
+planner that moves the instant a plan forms gets credited physically impossible
+sub-100 ms "reactions" in dense traffic.
 
 The naive bot is caught in seconds by kinematics (machine-clean swipes, jitter
 ≈ 0) and event provenance. The replay farm survives provenance blinding (its
@@ -125,29 +126,29 @@ gap: it gates its reaction times to threat onset with an ex-Gaussian sampler (a
 real lapse tail), enters contested space on purpose and sometimes genuinely
 crashes for it, and fakes aborted gestures.
 
-Three minutes is not long enough to separate those two claims, so run both out
-to **10 minutes × 12 seeds** (`pnpm batch --duration 600`) and compare them on
-equal terms:
+Time is the natural counter-argument (more session, more evidence), so run
+both out to **10 minutes × 12 seeds** (`pnpm batch --duration 600`) and compare
+them on equal terms:
 
 | attacker | verdict at 600 s | ever SUSPECT | ever BOT | mean conf | median t→BOT |
 |---|---|---|---|---|---|
-| evasive generative (T2+) | **SUSPECT 100%** | 12/12 | **6/12** | 0.50 | 54 s *(of the 6)* |
-| **stealth camouflage (T3)** | **HUMAN 12/12** | 1/12 | **0/12** | **0.04** | never |
+| evasive generative (T2+) | BOT 25% | 11/12 | **9/12** | 0.53 | 51 s *(of the 9)* |
+| **stealth camouflage (T3)** | **HUMAN 12/12** | 0/12 | **0/12** | **0.07** | never |
 
 This is the result worth reading. The detector gets the evasive bot inside a
-minute (a median 54 s to the first BOT touch) and never lets go: every seed
-sits pinned at SUSPECT for as long as the session runs, because the
-impossible-RT artifact keeps recurring. The stealth rung is what breaks that
-trend: it sits at 0/12 ever-BOT no matter how long the session runs, with
-confidence flat at 0.04; its one transient SUSPECT graze decays back to HUMAN,
-because the session-level signals need volume and this attacker supplies
-human-shaped volume. Against everything below T3 time is the defender's ally;
-at T3 it stops helping.
+minute (a median 51 s to the first BOT touch) and never lets go: eleven of
+twelve seeds escalate and confidence parks at 0.53 for as long as the session
+runs, because the impossible-RT artifact keeps recurring. The stealth rung is
+what breaks that trend: it sits at 0/12 ever-SUSPECT and 0/12 ever-BOT no
+matter how long the session runs, with confidence flat at 0.07, because the
+session-level signals need volume and this attacker supplies human-shaped
+volume. Against everything below T3 time is the defender's ally; at T3 it
+stops helping.
 
-On these batch seeds the stealth attacker grazes SUSPECT once in twelve, at
-~143 s, on the behavior-texture signal; it never reaches BOT, and SUSPECT
-queues a review rather than acting on the account. "Invisible" was never the
-claim; the precise statement: *the detector never gets enough to act on.*
+The wider sweep (40 seeds × 180 s, `pnpm batch --seeds 40`) posts a clean
+sheet: 0/40 ever-SUSPECT, 0/40 ever-BOT. "Invisible" was never the claim, and
+a 40-seed sheet is finite evidence, not a proof; the precise statement: *the
+detector never gets enough to act on.*
 
 That is the ceiling of client-side behavioral detection. What survives it is
 the economics, not a better forensic signal.
@@ -174,11 +175,11 @@ the signal separates humans from a given attacker class at all.
    T1 even when each replay is perturbed.
 5. **Perfection** — dodge-margin consistency and survival rates humans don't
    produce (zero deaths over dozens of dodges; metronomic margins).
-6. **Behavior texture** — session habits automation skips: aborted gestures,
-   entering contested space and *paying* for it, actually banking runs. Catches
-   T2+; **largely defeated by T3**, which manufactures all three. It keeps a
-   thin residual grip: 1 of 40 seeds grazes SUSPECT on the video-fitted build
-   (the pre-refit build grazed 2 of 40), and it never escalates past a review.
+6. **Behavior texture**: session habits automation skips, like aborted
+   gestures, entering contested space and *paying* for it, actually banking
+   runs. Catches T2+; **defeated by T3**, which manufactures all three (earlier
+   builds kept a thin residual grip of 1-2 SUSPECT grazes per 40 seeds; on the
+   current reference-fitted traffic the 40-seed sheet is clean).
 7. **Event integrity** — synthetic-event provenance (`isTrusted`), coordinate
    granularity. Cheap to spoof at the OS level, so corroborating only — it goes
    to zero the moment hardware injection is simulated.
@@ -318,12 +319,15 @@ detector.** Every profitable-and-hidden row above is against a field that either
 plays badly or plays the wrong strategy for the rule. The video-fitted payout
 curve makes the mechanism sharp: it pays $0 below a score cliff and a solo
 player only breaks even far above it, but head-to-head any banked run beats a
-forfeit, so the attacker's optimum is banking just past the cliff while human
-instinct chases break-even. The field is systematically too greedy, and that
-gap *is* the attacker's edge. Anything that teaches players to bank better (UX
-nudges, a visible expected-value hint, better onboarding) narrows the
-exploitable margin. That is an unusual place to find an anti-cheat lever, and it
-is cheaper than any detector.
+forfeit, so the attacker's edge is banking *discipline*: it always banks at its
+target while human instinct chases break-even or forfeits chasing more. Where
+that target sits depends on the traffic: under the reference-fitted spawn rules
+(a car-free cashout lane, no lane ever queuing) the modeled field survives to
+bank routinely, and a 2200-8000 target sweep against the strongest field peaks
+at 4000, mid-curve rather than just past the cliff. Anything that teaches
+players to bank better (UX nudges, a visible expected-value hint, better
+onboarding) narrows the exploitable margin. That is an unusual place to find an
+anti-cheat lever, and it is cheaper than any detector.
 
 **Bottom line.** The claim "there is no profitable-and-hidden zone"
 survives, but conditionally, and the conditions are now stated: it holds under a
@@ -426,10 +430,10 @@ is ready and regenerates with a single command.
   attacker who models motor noise and reaction timing correctly; a real one
   would face device attestation this bench does not simulate.
 - **The stealth no-action sheet is 40 seeds wide, not infinite.** On the
-  video-fitted build the stealth attacker grazes SUSPECT on 1 of 40 seeds and
-  never reaches BOT (the pre-refit build grazed 2 of 40). A claim built on 40
-  deterministic seeds bounds the detector's false-negative rate; it does not
-  prove invisibility against a review queue fed by more traffic.
+  current reference-fitted build the stealth attacker never touches SUSPECT or
+  BOT across all 40 seeds (earlier builds grazed SUSPECT on 1-2 of 40). A claim
+  built on 40 deterministic seeds bounds the detector's false-negative rate; it
+  does not prove invisibility against a review queue fed by more traffic.
 - **Every attacker/detector number here is measured at 180 s or 600 s of a
   single account.** Nothing in this bench models an attacker who tunes against
   the detector over weeks, which is the realistic adversary.

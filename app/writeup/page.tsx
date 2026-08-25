@@ -165,18 +165,17 @@ export default function Writeup() {
       <Table
         head={["attacker", "verdict @180s", "ever SUSP", "ever BOT", "conf", "t→BOT", "jitter", "Δ⁴/Δ²", "RT floor"]}
         rows={[
-          ["naive scripted", "BOT 100%", "0/12", "12/12", "0.75", "16 s", "0.00", "0.00", "60 ms"],
-          ["replay farm (injected)", "BOT 100%", "0/12", "12/12", "0.75", "26 s", "1.82", "2.28", "68 ms"],
-          ["evasive generative", "BOT 8%", "12/12", "6/12", "0.51", "54 s *", "1.63", "1.74", "62 ms"],
-          ["stealth camouflage", "HUMAN 11/12", "1/12", "0/12", "0.10", "never", "1.62", "1.75", "229 ms"],
+          ["naive scripted", "BOT 100%", "0/12", "12/12", "0.75", "14 s", "0.00", "0.00", "81 ms"],
+          ["replay farm (injected)", "BOT 100%", "0/12", "12/12", "0.75", "23 s", "1.82", "2.27", "65 ms"],
+          ["evasive generative", "BOT 50%", "9/12", "9/12", "0.56", "51 s *", "1.62", "1.76", "64 ms"],
+          ["stealth camouflage", "HUMAN 12/12", "0/12", "0/12", "0.08", "never", "1.62", "1.74", "235 ms"],
         ]}
         hot={(r, c) => r === 3 && c === 3}
       />
       <P dim>
-        * median over the six seeds that reached BOT at all, not over all twelve. The evasive bot
-        <em> ends</em> the session called BOT on 8% of seeds but touches SUSPECT on every seed and
-        BOT on half. Reading the final verdict alone understates the detector. The stealth bot
-        grazes SUSPECT once in twelve (behavior texture, ~143 s in) and never reaches BOT.
+        * median over the nine seeds that reached BOT at all, not over all twelve. The evasive bot
+        touches SUSPECT and BOT on nine of twelve seeds; reading the final verdict alone
+        understates the detector. The stealth bot never touches SUSPECT or BOT on any seed.
       </P>
       <P>
         The evasive generative bot defeats every swipe-level motor-forensics signal by modeling human
@@ -206,23 +205,23 @@ export default function Writeup() {
       <Table
         head={["attacker", "verdict @600s", "ever SUSP", "ever BOT", "conf", "t→BOT"]}
         rows={[
-          ["evasive generative", "SUSPECT 100%", "12/12", "6/12", "0.50", "54 s"],
-          ["stealth camouflage", "HUMAN 12/12", "1/12", "0/12", "0.04", "never"],
+          ["evasive generative", "BOT 25%", "11/12", "9/12", "0.53", "51 s"],
+          ["stealth camouflage", "HUMAN 12/12", "0/12", "0/12", "0.07", "never"],
         ]}
         hot={(r, c) => r === 1 && c === 3}
       />
       <P>
         This is the result worth reading. The detector gets the evasive bot inside a minute (a
-        median 54&nbsp;s to the first BOT touch) and never lets go: every seed sits pinned at
-        SUSPECT for as long as the session runs, because the impossible-RT artifact keeps
-        recurring. The stealth rung breaks that trend. It sits at 0/12 ever-BOT however long the
-        session runs, with confidence flat at 0.04, and its one transient SUSPECT graze decays
-        back to HUMAN, because the session-level signals need volume and this attacker supplies
+        median 51&nbsp;s to the first BOT touch) and never lets go: eleven of twelve seeds
+        escalate and confidence parks at 0.53 for as long as the session runs, because the
+        impossible-RT artifact keeps recurring. The stealth rung breaks that trend. It sits at
+        0/12 ever-SUSPECT and 0/12 ever-BOT however long the session runs, with confidence flat
+        at 0.07, because the session-level signals need volume and this attacker supplies
         human-shaped volume. Below T3, time is the defender&apos;s ally; at T3 it stops helping.
       </P>
       <P>
-        The wider 40-seed sweep reads the same: the stealth attacker grazes SUSPECT on 1 of 40
-        seeds and never reaches BOT. &ldquo;Invisible&rdquo; was never the claim; the precise
+        The wider 40-seed sweep posts a clean sheet: 0 of 40 ever touch SUSPECT, 0 of 40 ever
+        reach BOT. &ldquo;Invisible&rdquo; was never the claim; the precise
         statement is that the client-side detector never gets enough to act on. That is the
         ceiling of client-side behavioral detection.
       </P>
@@ -362,10 +361,11 @@ export default function Writeup() {
         Every profitable-and-hidden row above is against a field that plays badly or plays the wrong
         strategy for its rule. Under the payout curve read off the recorded session the mechanism is
         sharper still: the curve pays $0 below a score cliff and a solo player only breaks even far
-        above it, but head-to-head any banked run beats a forfeit, so the attacker&apos;s optimum is
-        to bank just past the cliff while human instinct chases break-even. That gap <em>is</em> the
-        edge. Anything that teaches players to bank better narrows the exploitable margin, an unusual
-        anti-cheat lever and a cheaper one than a detector.
+        above it, but head-to-head any banked run beats a forfeit, so the attacker&apos;s edge is
+        banking discipline: it always banks at its target (a target sweep against the strongest
+        field peaks at 4000, mid-curve) while human instinct chases break-even. That gap{" "}
+        <em>is</em> the edge. Anything that teaches players to bank better narrows the exploitable
+        margin, an unusual anti-cheat lever and a cheaper one than a detector.
       </P>
       <P>
         So the claim survives only conditionally: there
@@ -413,9 +413,10 @@ export default function Writeup() {
       </P>
       <P>
         Two more worth stating plainly. <strong>The stealth no-action sheet is 40 seeds wide, not
-        infinite</strong>: 1 of 40 seeds grazes SUSPECT and 0 of 40 ever reach BOT on the
-        video-fitted build (the pre-refit build grazed 2 of 40), which bounds the false-negative
-        rate rather than proving invisibility against a review queue fed by more traffic. And every attacker number on this page is
+        infinite</strong>: on the current reference-fitted build it never touches SUSPECT or BOT
+        across all 40 seeds (earlier builds grazed SUSPECT on 1-2 of 40), which bounds the
+        false-negative rate rather than proving invisibility against a review queue fed by more
+        traffic. And every attacker number on this page is
         measured over 180 or 600&nbsp;s of a <em>single account</em>; nothing here models an
         adversary who tunes against the detector over weeks, which a real one would.
       </P>

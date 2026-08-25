@@ -655,13 +655,14 @@ export const PRESETS: Preset[] = [
         riskPerMin: 0.7,
         abortsPerMin: 1.6,
         /*
-         * Head-to-head, any banked run beats a forfeit, and the payout curve
-         * pays $0 below ~2050, so the profit-optimal policy banks just past
-         * that cliff rather than chasing the 5430 break-even a solo player
-         * needs. Banking at all also retires the "never banks a run" texture
-         * flag. (Supersedes the pre-video `pnpm evo` sweep's bank@30.)
+         * Head-to-head, any banked run beats a forfeit, but the reference's
+         * car-free cashout lane and capped traffic let the modeled field
+         * survive to bank past the ~2050 payout cliff routinely, so the
+         * profit-optimal target sits mid-curve: a 2200-8000 sweep against the
+         * field peaks at 4000 (win rate 0.59). Banking at all also retires
+         * the "never banks a run" texture flag.
          */
-        cashout: { target: 2200 },
+        cashout: { target: 4000 },
       },
     },
   },

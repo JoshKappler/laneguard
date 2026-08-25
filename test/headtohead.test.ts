@@ -256,23 +256,30 @@ describe("cashout policy", () => {
       seed: 31337,
       bot: { noise: { model: "organic" }, cashout: { target } },
     });
-    let banked = 0;
-    for (let c = 0; c < courses; c++)
-      if (playRun(cfg, 900_000 + c * 31).banked > 0) banked++;
-    return banked / courses;
+    const scores: number[] = [];
+    for (let c = 0; c < courses; c++) {
+      const r = playRun(cfg, 900_000 + c * 31);
+      if (r.banked > 0) scores.push(r.score);
+    }
+    return { rate: scores.length / courses, scores };
   };
 
-  test("a bank target makes the bot actually bank; null is the legacy drift", () => {
-    // the video-fitted course kills most runs before any target, so the pin is
-    // a ratio plus a floor rather than a fixed absolute gap
+  test("a bank target banks deliberately; null only drifts into the lane", () => {
+    // the car-free cashout lane makes accidental banks common (escapes that
+    // can't merge back), and both policies share those. The target's mark is
+    // the banks it ADDS: a tight cluster just past 2200 that drift lacks
+    // (measured 15 vs 4 in [2200, 2600) over these 240 shared courses)
     const never = run(null);
     const eager = run(2200);
-    expect(eager).toBeGreaterThan(Math.max(never * 3, 0.08));
+    expect(eager.rate).toBeGreaterThan(Math.max(never.rate, 0.08));
+    const inBand = (s: number[]) => s.filter((x) => x >= 2200 && x < 2600).length;
+    expect(inBand(eager.scores)).toBeGreaterThanOrEqual(inBand(never.scores) + 8);
+    expect(Math.min(...never.scores)).toBeLessThan(2200);
   });
 
   test("greed is a real trade-off, not a free win", () => {
     // pushing for a bigger multiplier means banking less often
-    expect(run(2200)).toBeGreaterThan(run(9800));
+    expect(run(2200).rate).toBeGreaterThan(run(9800).rate);
   });
 
   test("the default config banks nothing on purpose", () => {
@@ -300,14 +307,14 @@ describe("execution error", () => {
 describe("shipped stealth preset", () => {
   test("banks like a human rather than never banking", () => {
     const preset = PRESETS.find((p) => p.id === "stealth-camouflage")!;
-    expect(preset.config.bot?.cashout?.target).toBe(2200);
+    expect(preset.config.bot?.cashout?.target).toBe(4000);
     const cfg = mergeConfig(DEFAULT_CONFIG, { ...preset.config, seed: 4242 });
     let banked = 0;
     const courses = 240;
     for (let c = 0; c < courses; c++)
       if (playRun(cfg, 900_000 + c * 31).banked > 0) banked++;
     // the whole point of the change: it cashes out on a real fraction of runs
-    // (measured 0.13 over 300 courses; the never-bank drift is 0.025)
+    // (measured 0.36 over 240 courses; the never-bank drift is 0.12)
     expect(banked / courses).toBeGreaterThan(0.08);
   });
 

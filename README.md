@@ -20,8 +20,9 @@ are what actually bind a bot.
 > nothing is invented, and first-principles priors are labeled as priors.
 
 The bench is four tabs on one nav: setup, run, results, writeup. A first visit
-boots a pre-run demo (the naive scripted bot, fast-forwarded 3 sim-minutes) so
-every panel arrives populated, then keeps running live. **Setup**: one run
+boots a pre-run demo of the stealth camouflage bot (the strongest attacker,
+fast-forwarded 3 sim-minutes) so every panel arrives populated with the
+interesting case, then keeps running live. **Setup**: one run
 panel, driver and anti-cheat side by side, plus a phone that records your real
 swipes and mutates them into the replay-farm corpus.
 
@@ -30,8 +31,9 @@ swipes and mutates them into the replay-farm corpus.
 **Run**: the game beside a ghost phone that traces each swipe in red at the
 speed it actually happened, one-line signal bars, detector confidence over the
 whole session against the SUSPECT/BOT cuts, and every completed run as a cell.
-Here the naive scripted bot is caught three minutes in: five red flags, BOT at
-75% confidence, and the enforcement line reading "would be actioned".
+Here the naive scripted bot is caught three minutes in: red flags on the
+reaction floor and trace replay, kinematics and integrity hot, BOT at 75%
+confidence, and the enforcement line reading "balance withheld".
 
 ![Run page: the naive scripted bot called BOT](docs/shots/run-naive-bot.png)
 
@@ -93,33 +95,32 @@ matters.
 |---|---|---|---|---|
 | naive scripted | **BOT 100%** | 0/12 | **12/12** | kinematics (jitter ≈ 0) + event provenance, in seconds |
 | replay farm (injected) | **BOT 100%** | 0/12 | **12/12** | replay similarity: repeats in shape *and* timing |
-| evasive generative | BOT 8% | 12/12 | **6/12** | organic noise beats motor forensics; the impossible-RT artifact lands in about a minute |
-| **stealth camouflage** | HUMAN 11/12 | 1/12 | **0/12** | **never reaches BOT; behavior texture grazes SUSPECT on one seed** |
+| evasive generative | BOT 50% | 9/12 | **9/12** | organic noise beats motor forensics; the impossible-RT artifact lands in about a minute |
+| **stealth camouflage** | HUMAN 12/12 | 0/12 | **0/12** | **never touches SUSPECT or BOT** |
 
 The stealth bot uses organic motor noise (pink 1/f + tremor + drift), ex-Gaussian
 reaction times gated to threat onset, deliberate imperfect play (it enters
 contested space and genuinely crashes for it, and fakes aborted gestures), and a
-human banking discipline. Banking changes two numbers at once: cashing out
-retires the "never banks a run" texture flag, and it made the attacker *better
-at winning* (head-to-head win rate 47.6% → 53.2% against the modeled field on
-shared courses), because under the video-fitted payout any banked run beats a
-forfeit. A competent attacker looks **more** normal as it gets stronger, so
-better play is not itself a tell.
+human banking discipline (it banks 36% of courses at its 4000 target). Banking
+changes two numbers at once: cashing out retires the "never banks a run"
+texture flag, and it made the attacker *better at winning* (head-to-head win
+rate 30.8% → 59.3% against the modeled field on shared courses), because under
+the video-fitted payout any banked run beats a forfeit. A competent attacker
+looks **more** normal as it gets stronger, so better play is not itself a tell.
 
-Three minutes doesn't separate the last two rungs, so run both to 10 minutes
-(`pnpm batch --duration 600`):
+Time is the natural counter-argument (more session, more evidence), so run the
+last two rungs to 10 minutes (`pnpm batch --duration 600`):
 
 | attacker | verdict at 600 s | ever SUSPECT | ever BOT | mean conf |
 |---|---|---|---|---|
-| evasive generative | **SUSPECT 100%** | 12/12 | **6/12** | 0.50 |
-| **stealth camouflage** | **HUMAN 12/12** | 1/12 | **0/12** | **0.04** |
+| evasive generative | BOT 25% | 11/12 | **9/12** | 0.53 |
+| **stealth camouflage** | **HUMAN 12/12** | 0/12 | **0/12** | **0.07** |
 
-The detector holds its grip on the evasive bot: a median 54 s to the first BOT
-touch, and every seed pinned at SUSPECT for as long as the session runs. The
-stealth rung breaks that trend: 0/12 ever-BOT however long it runs, confidence
-flat at 0.04, and its one SUSPECT graze (behavior texture) decays back to
-HUMAN. The wider 40-seed sweep reads the same: 1/40 grazes SUSPECT, 0/40 ever
-reaches BOT.
+The detector holds its grip on the evasive bot: a median 51 s to the first BOT
+touch, 11/12 seeds escalated, and confidence parked at 0.53 for as long as the
+session runs. The stealth rung breaks that trend: 0/12 ever-SUSPECT and 0/12
+ever-BOT however long it runs, confidence flat at 0.07. The wider 40-seed
+sweep reads the same: 0/40 ever touches SUSPECT, 0/40 ever reaches BOT.
 
 ## Why the economy wins
 
@@ -152,10 +153,11 @@ conditions worth spelling out:
   and a 71% bot reads as just 2.1σ. Same detector, same bot.
 - **The attacker's profit is the field's mistakes.** The video-fitted payout
   pays $0 below a score cliff and a solo player only breaks even far above it,
-  but head-to-head any banked run beats a forfeit, so the optimum is banking
-  just past the cliff while human instinct chases break-even; that gap is the
-  entire edge. Teaching players to bank well is an anti-cheat lever, and a
-  cheaper one than a detector.
+  but head-to-head any banked run beats a forfeit, so the edge is banking
+  discipline: the bot always banks at its target (a target sweep against the
+  strongest field peaks at 4000, mid-curve) while human instinct chases
+  break-even; that gap is the entire edge. Teaching players to bank well is an
+  anti-cheat lever, and a cheaper one than a detector.
 
 Full tables and method in [REPORT.md](REPORT.md) §5a.
 

@@ -19,9 +19,10 @@ import { BenchController, type BenchSnapshot } from "./bench-controller";
 const CONFIG_KEY = "laneguard.config.v2";
 const CORPUS_KEY = "laneguard.corpus.v1";
 
-/* First visit (no saved config, no ?c= permalink): boot the naive scripted
-   bot and pre-run 3 sim-minutes so every panel arrives populated. */
-const DEMO_PRESET_ID = "naive-scripted";
+/* First visit (no saved config, no ?c= permalink): boot the stealth
+   camouflage bot (the strongest attacker, and the one whose runs actually
+   bank money) and pre-run 3 sim-minutes so every panel arrives populated. */
+const DEMO_PRESET_ID = "stealth-camouflage";
 const DEMO_FF_MS = 180_000;
 
 type Listener = () => void;
@@ -49,7 +50,7 @@ class BenchStore {
       const p = PRESETS.find((x) => x.id === DEMO_PRESET_ID);
       if (p) this.controller.annotate(p.logLine);
       this.controller.annotate(
-        "DEMO: pre-ran 3 minutes of the naive scripted bot so every panel arrives populated. Pick any preset on setup to run your own session."
+        "DEMO: pre-ran 3 minutes of the stealth camouflage bot so every panel arrives populated. Pick any preset on setup to run your own session."
       );
       this.controller.fastForward(DEMO_FF_MS);
     }
