@@ -176,6 +176,9 @@ export default function Writeup() {
         * median over the nine seeds that reached BOT at all, not over all twelve. The evasive bot
         touches SUSPECT and BOT on nine of twelve seeds; reading the final verdict alone
         understates the detector. The stealth bot never touches SUSPECT or BOT on any seed.
+        The replay row runs against the synthesized corpus, capped at 8 distinct traces, which
+        keeps replay similarity saturated; replaying a large corpus of real recorded swipes
+        starves that signal and is not measured here.
       </P>
       <P>
         The evasive generative bot defeats every swipe-level motor-forensics signal by modeling human

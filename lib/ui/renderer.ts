@@ -472,9 +472,9 @@ export class Renderer {
       const zc = (i + 0.5) * C.slot;
       t.save();
       t.translate(C.texW / 2, ((wordLen - zc) / wordLen) * C.texH);
-      // tops toward the road, like the reference paint
-      t.rotate(-Math.PI / 2);
-      t.fillText(C.word[i], 0, 0);
+      // readable from the car's side of the road
+      t.rotate(Math.PI / 2);
+      t.fillText(C.word[C.word.length - 1 - i], 0, 0);
       t.restore();
     }
     this.cashTex = cv;

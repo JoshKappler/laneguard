@@ -2,7 +2,7 @@
  * Attacker models, all driven through the same input pipeline the human uses;
  * the detector never sees which one is running.
  *   perfect    — instant reaction, machine-clean synthetic swipes
- *   mirror     — perturbed replay of a small recorded-trace corpus
+ *   mirror     — perturbed replay of a trace corpus (synthesized unless useRecorded)
  *   generative — a fresh human-shaped trace per swipe, iid or organic noise,
  *                plus the stealth kit: ex-Gaussian RTs gated to threat onset,
  *                real contested-space risks, fake aborts. See REPORT.md §3.

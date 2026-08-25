@@ -620,7 +620,7 @@ export const PRESETS: Preset[] = [
     id: "replay-farm",
     label: "Replay farm",
     description:
-      "Replays a corpus of recorded human traces, perturbed per use, delivered through simulated hardware injection the way a phone-farm rig would.",
+      "Replays a small trace corpus, perturbed per use, delivered through simulated hardware injection the way a phone-farm rig would. Synthesized traces by default; switch to your own recorded swipes with mirror.useRecorded.",
     logLine:
       "PRESET: replay farm — provenance is blind; replay similarity has to carry the verdict",
     config: { mode: "mirror", hwInject: true },

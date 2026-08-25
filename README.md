@@ -94,9 +94,15 @@ matters.
 | attacker | verdict at 180 s | ever SUSPECT | ever BOT | how it's caught (or not) |
 |---|---|---|---|---|
 | naive scripted | **BOT 100%** | 0/12 | **12/12** | kinematics (jitter ≈ 0) + event provenance, in seconds |
-| replay farm (injected) | **BOT 100%** | 0/12 | **12/12** | replay similarity: repeats in shape *and* timing |
+| replay farm (injected) | **BOT 100%** | 0/12 | **12/12** | replay similarity: repeats in shape *and* timing (see the corpus-size caveat below) |
 | evasive generative | BOT 50% | 9/12 | **9/12** | organic noise beats motor forensics; the impossible-RT artifact lands in about a minute |
 | **stealth camouflage** | HUMAN 12/12 | 0/12 | **0/12** | **never touches SUSPECT or BOT** |
+
+**Corpus-size caveat on the replay row.** That result is measured against the
+synthesized corpus, which `buildCorpus` caps at 8 distinct traces; replay
+similarity stays saturated across that whole range. Replaying a *large* corpus
+of real recorded swipes (`mirror.useRecorded`) starves the same signal and is
+not measured here.
 
 The stealth bot uses organic motor noise (pink 1/f + tremor + drift), ex-Gaussian
 reaction times gated to threat onset, deliberate imperfect play (it enters
@@ -168,5 +174,7 @@ swipe corpus. To calibrate: serve `recorder/index.html` over your LAN, record
 swipes on phone + desktop, drop the JSON in `corpus/` (gitignored — it's
 biometric-adjacent), and run `pnpm calibrate`. That computes a per-signal ROC/AUC
 against each attacker class and picks thresholds at FPR ≤ 0.1%. Until then the UI
-shows the uncalibrated-prior state and says so. **No corpus has been recorded
-yet** — this is the one open item.
+shows the uncalibrated-prior state and says so. **No calibration corpus has been
+recorded yet.** That is the one open item. Swipes recorded in the bench's phone
+panel are a separate in-browser store that feeds the replay-farm attacker; they
+are not calibration data and never touch `corpus/`.

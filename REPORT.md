@@ -110,8 +110,10 @@ sub-100 ms "reactions" in dense traffic.
 
 The naive bot is caught in seconds by kinematics (machine-clean swipes, jitter
 ≈ 0) and event provenance. The replay farm survives provenance blinding (its
-injected events arrive `isTrusted`) but is caught by replay similarity — its
-swipes repeat in shape *and* timing. The evasive generative bot defeats every
+injected events arrive `isTrusted`) but is caught by replay similarity: its
+swipes repeat in shape *and* timing. That holds against the synthesized corpus,
+capped at 8 distinct traces; replaying a large corpus of real recorded swipes
+starves the signal and is not measured here. The evasive generative bot defeats every
 swipe-level motor-forensics signal by modeling human motor noise correctly:
 
 | noise model | Δ⁴/Δ² whiteness | caught by motor forensics? |
