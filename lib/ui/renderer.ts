@@ -42,7 +42,7 @@ const CAM_OMEGA = 14, CAM_ZETA = 0.5;
 const GOLD = { body: "#cda21a", dark: "#8a6c09", roof: "#ecc746", glass: "#0b0c10" };
 
 // road-space texture for the flat CASHOUT lettering
-const CASH = { word: "CASHOUT", slot: 4.6, period: 62, latHalf: 0.48, latC: 3.17, texW: 200, texH: 640, em: 215 };
+const CASH = { word: "CASHOUT", slot: 4.8, period: 62, latHalf: 0.48, latC: 3.0, texW: 200, texH: 640, em: 126 };
 
 export interface Particle {
   x: number; y: number; vx: number; vy: number;
@@ -472,8 +472,9 @@ export class Renderer {
       const zc = (i + 0.5) * C.slot;
       t.save();
       t.translate(C.texW / 2, ((wordLen - zc) / wordLen) * C.texH);
-      t.rotate(Math.PI / 2);
-      t.fillText(C.word[C.word.length - 1 - i], 0, 0);
+      // tops toward the road, like the reference paint
+      t.rotate(-Math.PI / 2);
+      t.fillText(C.word[i], 0, 0);
       t.restore();
     }
     this.cashTex = cv;
