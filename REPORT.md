@@ -100,7 +100,8 @@ balance the moment either fires.
 | replay farm (T1, injected) | **BOT 100%** | 0/12 | **12/12** | 0.75 | 19 s | 1.82 px | 2.27 | 61 ms |
 | evasive generative (T2+) | BOT 42% | 7/12 | **9/12** | 0.55 | 63 s *(of the 9)* | 1.64 px | 1.77 | 74 ms |
 | **stealth camouflage (T3)** | HUMAN 12/12 | 0/12 | **0/12** | **0.08** | never | 1.63 px | 1.75 | 239 ms |
-| **route planner (T4)** | HUMAN 12/12 | 1/12 | **0/12** | **0.09** | never | 1.63 px | 1.77 | 236 ms |
+| **route planner (T4)** | HUMAN 12/12 | 3/12 | **2/12** | **0.10** | 97 s *(of the 2)* | 1.64 px | 1.74 | 187 ms |
+| *modeled humans (control)* | *HUMAN 24/24* | *1/24* | *0/24* | *0.09* | *never* | *1.63 px* | *1.75* | *233 ms* |
 
 The two smoking-gun tiers skip SUSPECT entirely: escalation takes them straight
 to BOT. The evasive bot is the interesting middle: it touches SUSPECT and BOT
@@ -112,11 +113,18 @@ sub-100 ms "reactions" in dense traffic.
 T4 is the rung that changes the economics rather than the forensics. Its
 motor and reaction statistics are indistinguishable from T3's, because it
 inherits the same stealth kit; what it adds is a receding-horizon route search
-(§3a) that cuts its solo loss from $2.81 a run to $0.45, and lifts its
-head-to-head win rate from 55.9% to 66.4%. It is the first attacker in this
-ladder that beats the 62.5% rake break-even, and the detector does not catch
-it: 0/12 seeds ever reach BOT, with one of twelve brushing SUSPECT and
-returning.
+(§3a) that cuts its solo loss from $2.81 a run to $0.53, and lifts its
+head-to-head win rate from 55.9% to 66.9%. It is the first attacker in this
+ladder that beats the 62.5% rake break-even.
+
+The control row is what makes the rest of the table interpretable, and it was
+missing until late. Running the detector against the modeled human field clears
+24 of 24 at a mean confidence of 0.09. The route planner reads 0.10. On the
+scalar the detector actually thresholds, the strongest attacker and a real
+player are the same number, and the final verdict is HUMAN on every seed. It is
+not perfectly clean: two seeds touch BOT at a median 97 s and decay back, where
+the weaker T3 rung touches nothing. Playing better costs a little cover, which
+is a finding rather than a defect, and the throw dial in §3a exists to spend it.
 
 The naive bot is caught in seconds by kinematics (machine-clean swipes, jitter
 ≈ 0) and event provenance. The replay farm survives provenance blinding (its
@@ -144,23 +152,36 @@ them on equal terms:
 
 | attacker | verdict at 600 s | ever SUSPECT | ever BOT | mean conf | median t→BOT |
 |---|---|---|---|---|---|
-| evasive generative (T2+) | BOT 25% | 11/12 | **9/12** | 0.53 | 51 s *(of the 9)* |
-| **stealth camouflage (T3)** | **HUMAN 12/12** | 0/12 | **0/12** | **0.07** | never |
+| evasive generative (T2+) | BOT 33% | 12/12 | **9/12** | 0.54 | 63 s *(of the 9)* |
+| **route planner (T4)** | **HUMAN 12/12** | 3/12 | **2/12** | **0.08** | 97 s *(of the 2)* |
+| **stealth camouflage (T3)** | **HUMAN 12/12** | 0/12 | **0/12** | **0.05** | never |
 
 This is the result worth reading. The detector gets the evasive bot inside a
-minute (a median 51 s to the first BOT touch) and never lets go: eleven of
-twelve seeds escalate and confidence parks at 0.53 for as long as the session
-runs, because the impossible-RT artifact keeps recurring. The stealth rung is
-what breaks that trend: it sits at 0/12 ever-SUSPECT and 0/12 ever-BOT no
-matter how long the session runs, with confidence flat at 0.07, because the
-session-level signals need volume and this attacker supplies human-shaped
-volume. Against everything below T3 time is the defender's ally; at T3 it
-stops helping.
+minute (a median 63 s to the first BOT touch) and never lets go: every seed
+escalates and confidence parks at 0.54 for as long as the session runs, because
+the impossible-RT artifact keeps recurring. The stealth rung is what breaks that
+trend: it sits at 0/12 ever-SUSPECT and 0/12 ever-BOT no matter how long the
+session runs, with confidence flat at 0.05, because the session-level signals
+need volume and this attacker supplies human-shaped volume. The route planner
+gains no new exposure from the extra seven minutes either: the same two seeds
+touch BOT, and mean confidence falls from 0.10 to 0.08 as the longer session
+dilutes them. Against everything below T3 time is the defender's ally; at T3
+and above it stops helping.
 
-The wider sweep (40 seeds × 180 s, `pnpm batch --seeds 40`) posts a clean
-sheet: 0/40 ever-SUSPECT, 0/40 ever-BOT. "Invisible" was never the claim, and
-a 40-seed sheet is finite evidence, not a proof; the precise statement: *the
-detector never gets enough to act on.*
+The wider sweep (40 seeds × 180 s, `pnpm batch --seeds 40`) separates the two
+top rungs, and twelve seeds had been hiding the difference:
+
+| attacker | verdict at 180 s | ever SUSPECT | ever BOT | mean conf |
+|---|---|---|---|---|
+| **stealth camouflage (T3)** | **HUMAN 40/40** | 1/40 | **0/40** | **0.08** |
+| **route planner (T4)** | HUMAN 39/40 | 7/40 | **4/40** | 0.12 |
+
+T3 keeps its clean sheet at 40 seeds: one SUSPECT brush, no BOT touch, ever. T4
+does not. It reaches BOT on four seeds and ends BOT on one, and its mean
+confidence of 0.12 sits above the 0.09 human control. "Invisible" was never the
+claim and is now measurably false for T4. The precise statement is narrower and
+still the interesting one: *the detector almost never gets enough to act on, and
+the rung that makes money is the rung it catches most.*
 
 ### 3a. The route planner, and why it is the one that pays
 
@@ -197,7 +218,7 @@ On 240 holdout courses (seeds disjoint from those it was tuned on):
 |---|---|---|---|---|---|
 | evasive generative (T2+) | 1.7% | $1.92 | -$2.98 | 36.5% | -$1.25 |
 | stealth camouflage (T3) | 33.8% | $0.60 | -$2.81 | 55.9% | -$0.32 |
-| **route planner (T4)** | **45.4%** | **$5.65** | **-$0.45** | **66.4%** | **+$0.19** |
+| **route planner (T4)** | **45.8%** | **$5.41** | **-$0.53** | **66.9%** | **+$0.21** |
 
 Solo play is negative for every rung, and for the modeled humans too. The
 payout curve pays a flat 1.289x from 5,582 to 8,497 and only reaches its 2.5x
@@ -207,7 +228,7 @@ it is why the solo column is the wrong one to read.
 
 The paying mode is the 1v1 pot with a 20% rake, where break-even is 62.5%. The
 win rate is over 1,440 shared-course pairings against the modeled field, and
-only T4 clears the bar, at 66.4% and +$0.19 a game. A repo test pins the size
+only T4 clears the bar, at 66.9% and +$0.21 a game. A repo test pins the size
 of the gap routing opens rather than the sign of a solo return, so the claim
 re-derives rather than rots.
 

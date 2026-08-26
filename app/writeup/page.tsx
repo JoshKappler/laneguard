@@ -169,15 +169,18 @@ export default function Writeup() {
           ["replay farm (injected)", "BOT 100%", "0/12", "12/12", "0.75", "19 s", "1.82", "2.27", "61 ms"],
           ["evasive generative", "BOT 42%", "7/12", "9/12", "0.55", "63 s *", "1.64", "1.77", "74 ms"],
           ["stealth camouflage", "HUMAN 12/12", "0/12", "0/12", "0.08", "never", "1.63", "1.75", "239 ms"],
-          ["route planner", "HUMAN 12/12", "1/12", "0/12", "0.09", "never", "1.63", "1.77", "236 ms"],
+          ["route planner", "HUMAN 12/12", "3/12", "2/12", "0.10", "97 s", "1.64", "1.74", "187 ms"],
+          ["modeled humans (control)", "HUMAN 24/24", "1/24", "0/24", "0.09", "never", "1.63", "1.75", "233 ms"],
         ]}
         hot={(r, c) => (r === 3 || r === 4) && c === 3}
       />
       <P dim>
         * median over the nine seeds that reached BOT at all, not over all twelve. The evasive bot
         touches BOT on nine of twelve seeds; reading the final verdict alone
-        understates the detector. The stealth bot never touches SUSPECT or BOT on any seed, and
-        the route planner never reaches BOT (one of twelve seeds brushed SUSPECT and came back).
+        understates the detector. The stealth bot never touches SUSPECT or BOT on any seed. The
+        route planner touches BOT on two seeds and decays back, at a mean confidence of 0.10
+        against 0.09 for the human control, so the scalar the detector thresholds does not
+        separate it from a real player.
         The replay row runs against the synthesized corpus, capped at 8 distinct traces, which
         keeps replay similarity saturated; replaying a large corpus of real recorded swipes
         starves that signal and is not measured here.
@@ -210,24 +213,32 @@ export default function Writeup() {
       <Table
         head={["attacker", "verdict @600s", "ever SUSP", "ever BOT", "conf", "t→BOT"]}
         rows={[
-          ["evasive generative", "BOT 25%", "11/12", "9/12", "0.53", "51 s"],
-          ["stealth camouflage", "HUMAN 12/12", "0/12", "0/12", "0.07", "never"],
+          ["evasive generative", "BOT 33%", "12/12", "9/12", "0.54", "63 s"],
+          ["route planner", "HUMAN 12/12", "3/12", "2/12", "0.08", "97 s"],
+          ["stealth camouflage", "HUMAN 12/12", "0/12", "0/12", "0.05", "never"],
         ]}
-        hot={(r, c) => r === 1 && c === 3}
+        hot={(r, c) => r === 2 && c === 3}
       />
       <P>
         This is the result worth reading. The detector gets the evasive bot inside a minute (a
-        median 51&nbsp;s to the first BOT touch) and never lets go: eleven of twelve seeds
-        escalate and confidence parks at 0.53 for as long as the session runs, because the
+        median 63&nbsp;s to the first BOT touch) and never lets go: every seed
+        escalates and confidence parks at 0.54 for as long as the session runs, because the
         impossible-RT artifact keeps recurring. The stealth rung breaks that trend. It sits at
         0/12 ever-SUSPECT and 0/12 ever-BOT however long the session runs, with confidence flat
-        at 0.07, because the session-level signals need volume and this attacker supplies
-        human-shaped volume. Below T3, time is the defender&apos;s ally; at T3 it stops helping.
+        at 0.05, because the session-level signals need volume and this attacker supplies
+        human-shaped volume. The route planner gains no new exposure from the extra seven
+        minutes either: the same two seeds touch BOT, and confidence falls to 0.08 as the
+        longer session dilutes them. Below T3, time is the defender&apos;s ally; at T3 and above
+        it stops helping.
       </P>
       <P>
-        The wider 40-seed sweep posts a clean sheet: 0 of 40 ever touch SUSPECT, 0 of 40 ever
-        reach BOT. &ldquo;Invisible&rdquo; was never the claim; the precise
-        statement is that the client-side detector never gets enough to act on. That is the
+        The wider 40-seed sweep separates the top two rungs, and twelve seeds had been hiding
+        the difference. Stealth camouflage keeps its clean sheet: 1 of 40 brushes SUSPECT, 0 of
+        40 ever reach BOT, mean confidence 0.08. The route planner does not: it reaches BOT on
+        4 seeds, ends BOT on 1, and reads 0.12 against 0.09 for the modeled human control.
+        &ldquo;Invisible&rdquo; was never the claim and is now measurably false for the planner.
+        The precise statement is narrower and more interesting: the detector almost never gets
+        enough to act on, and the rung that makes money is the rung it catches most. That is the
         ceiling of client-side behavioral detection.
       </P>
       <P>
@@ -251,7 +262,7 @@ export default function Writeup() {
         rows={[
           ["evasive generative", "1.7%", "$1.92", "-$2.98", "36.5%", "-$1.25"],
           ["stealth camouflage", "33.8%", "$0.60", "-$2.81", "55.9%", "-$0.32"],
-          ["route planner", "45.4%", "$5.65", "-$0.45", "66.4%", "+$0.19"],
+          ["route planner", "45.8%", "$5.41", "-$0.53", "66.9%", "+$0.21"],
         ]}
         hot={(r, c) => r === 2 && (c === 4 || c === 5)}
       />
@@ -261,8 +272,8 @@ export default function Writeup() {
         only reaches its 2.5x cap at 10,000: a run has to survive almost to the plateau before
         the $3.01 entry comes back. That is the game&apos;s economics, not an attacker weakness.
         The mode that pays is the one the game runs, a 1v1 pot with a 20% rake, where break-even
-        is a 62.5% win rate. Only the planner clears it, at 66.4% over 1,440 shared-course
-        pairings, worth +$0.19 a game, and it does so while reading HUMAN and never reaching BOT
+        is a 62.5% win rate. Only the planner clears it, at 66.9% over 1,440 shared-course
+        pairings, worth +$0.21 a game, and it does so while reading HUMAN and never reaching BOT
         on any seed.
       </P>
       <P>
@@ -270,7 +281,7 @@ export default function Writeup() {
         every run it can is detectable on win rate alone, whatever its input texture looks like,
         so <code>throwRate</code> sets the share of runs it loses on purpose: it picks a score in
         advance and stops dodging there, which reads as a missed turn. At 0.15 the win rate
-        falls to 65.0% and EV to +$0.12; at 0.30 it is 60.2% and -$0.11. Camouflage is bought
+        falls to 64.2% and EV to +$0.08; at 0.30 it is 58.4% and -$0.20. Camouflage is bought
         with EV, and the dial can only lower the win rate, never raise it.
       </P>
 

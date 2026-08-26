@@ -116,7 +116,9 @@ export function humanConfig(
     ...base,
     seed,
     mode: "generative",
-    hwInject: false,
+    // a real player's events carry isTrusted; without this the surrogate trips
+    // the integrity signal and the whole field reads as synthetic input
+    hwInject: true,
     bot: {
       ...base.bot,
       rt: {

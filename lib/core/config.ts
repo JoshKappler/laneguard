@@ -629,7 +629,7 @@ export const PRESETS: Preset[] = [
       hwInject: true,
       bot: {
         noise: { model: "organic" },
-        rt: { family: "exgaussian", mean: 185, sd: 32, tau: 60, floor: 170 },
+        rt: { family: "exgaussian", mean: 150, sd: 32, tau: 60, floor: 120 },
         gateRtToThreat: true,
         plan: true,
         abortsPerMin: 1.6,

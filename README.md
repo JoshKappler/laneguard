@@ -97,7 +97,28 @@ matters.
 | replay farm (injected) | **BOT 100%** | 0/12 | **12/12** | replay similarity: repeats in shape *and* timing (see the corpus-size caveat below) |
 | evasive generative | BOT 42% | 7/12 | **9/12** | organic noise beats motor forensics; the impossible-RT artifact lands in about a minute |
 | **stealth camouflage** | HUMAN 12/12 | 0/12 | **0/12** | **never touches SUSPECT or BOT** |
-| **route planner** | HUMAN 12/12 | 1/12 | **0/12** | **never reaches BOT; one seed brushed SUSPECT and came back** |
+| **route planner** | HUMAN 12/12 | 3/12 | **2/12** | **final verdict stays HUMAN; two seeds touch BOT and come back, median 97 s** |
+| *modeled humans (control)* | *HUMAN 24/24* | *1/24* | *0/24* | *false-positive baseline, mean conf 0.09* |
+
+The last row is the one that makes the others readable, and it was missing until
+late. Run the detector against the modeled human field and it clears 24 of 24 at
+a mean confidence of 0.09, so the instrument passes legitimate players before it
+is asked anything about bots.
+
+Twelve seeds is not many, so the top two rungs also ran at 40 (`pnpm batch
+--seeds 40`). That is the number to quote:
+
+| attacker | verdict at 180 s | ever SUSPECT | ever BOT | mean conf |
+|---|---|---|---|---|
+| **stealth camouflage** | **HUMAN 40/40** | 1/40 | **0/40** | **0.08** |
+| **route planner** | HUMAN 39/40 | 7/40 | **4/40** | 0.12 |
+
+Stealth holds a clean sheet across 40 seeds. The route planner does not: it
+touches BOT on one seed in ten and ends BOT on one seed of forty. Its 0.12 mean
+confidence sits above the 0.09 human baseline but far below the SUSPECT cut, so
+the honest statement is that it is rarely actioned, not that it is invisible.
+The twelve-seed table above reads cleaner than the truth, which is what small
+samples do.
 
 **Corpus-size caveat on the replay row.** That result is measured against the
 synthesized corpus, which `buildCorpus` caps at 8 distinct traces; replay
@@ -112,8 +133,12 @@ human banking discipline (it banks 33% of courses at its 4000 target). Banking
 changes two numbers at once: cashing out retires the "never banks a run"
 texture flag, and it made the attacker *better at winning* (head-to-head win
 rate 36.5% → 55.9% against the modeled field on shared courses), because under
-the video-fitted payout any banked run beats a forfeit. A competent attacker
-looks **more** normal as it gets stronger, so better play is not itself a tell.
+the video-fitted payout any banked run beats a forfeit.
+
+Better play is not free, though. The route planner below wins more than the
+stealth rung and is also the only HUMAN-verdict attacker that ever touches BOT
+(2/12 against 0/12). Skill buys money and costs a little cover, and where a bot
+sits on that trade is a dial its operator gets to choose.
 
 **The route planner is the rung that actually pays.** Every attacker above it
 loses money per run: they dodge one step at a time, so they die a median 26-30 s
@@ -129,7 +154,7 @@ disjoint from the ones it was tuned on):
 |---|---|---|---|---|---|
 | evasive generative | 1.7% | $1.92 | -$2.98 | 36.5% | -$1.25 |
 | stealth camouflage | 33.8% | $0.60 | -$2.81 | 55.9% | -$0.32 |
-| **route planner** | **45.4%** | **$5.65** | **-$0.45** | **66.4%** | **+$0.19** |
+| **route planner** | **45.8%** | **$5.41** | **-$0.53** | **66.9%** | **+$0.21** |
 
 Read the last two columns, not the middle one. Solo play loses money for every
 attacker here, and it loses money for the modeled humans too: the payout curve
@@ -140,11 +165,12 @@ attacker.
 
 The mode that pays is the one the game actually runs, a 1v1 pot with a 20%
 rake, where break-even is a 62.5% win rate. Only the route planner clears it,
-at 66.4% over 1,440 shared-course pairings against the modeled field, worth
-+$0.19 a game. It does this while reading HUMAN: 0/12 seeds ever reach BOT, and
-one of twelve brushed SUSPECT and came back. That combination, a profitable
-attacker the detector does not catch, is the honest finding this bench exists
-to surface.
+at 66.9% over 1,440 shared-course pairings against the modeled field, worth
++$0.21 a game. It stays under enforcement while doing it: HUMAN on 39 of 40
+seeds at a mean confidence of 0.12, against 0.09 for the modeled human control
+and a SUSPECT cut far above both. The honest asterisk is that it is the only
+HUMAN-verdict attacker that touches BOT at all, on 4 seeds in 40. Profitable and
+rarely actioned, not invisible.
 
 The margin is thin, and that is the point of the throw dial. A bot that banks
 every run it can is detectable on win rate alone, whatever its input texture
@@ -155,9 +181,9 @@ margin.
 
 | throw rate | head-to-head win rate | EV per game |
 |---|---|---|
-| 0 (default) | 66.4% | +$0.19 |
-| 0.15 | 65.0% | +$0.12 |
-| 0.30 | 60.2% | -$0.11 |
+| 0 (default) | 66.9% | +$0.21 |
+| 0.15 | 64.2% | +$0.08 |
+| 0.30 | 58.4% | -$0.20 |
 
 Two limits worth stating plainly. Survival, not greed, is what caps this: the
 planner banks 45 to 46% of runs, and a 20-configuration sweep over lookahead
@@ -170,18 +196,20 @@ raise it, so the achieved rate is always the planner's survival rate times
 (1 - throwRate).
 
 Time is the natural counter-argument (more session, more evidence), so run the
-last two rungs to 10 minutes (`pnpm batch --duration 600`):
+last three rungs to 10 minutes (`pnpm batch --duration 600`):
 
 | attacker | verdict at 600 s | ever SUSPECT | ever BOT | mean conf |
 |---|---|---|---|---|
-| evasive generative | BOT 25% | 11/12 | **9/12** | 0.53 |
-| **stealth camouflage** | **HUMAN 12/12** | 0/12 | **0/12** | **0.07** |
+| evasive generative | BOT 33% | 12/12 | **9/12** | 0.54 |
+| **route planner** | **HUMAN 12/12** | 3/12 | **2/12** | **0.08** |
+| **stealth camouflage** | **HUMAN 12/12** | 0/12 | **0/12** | **0.05** |
 
-The detector holds its grip on the evasive bot: a median 51 s to the first BOT
-touch, 11/12 seeds escalated, and confidence parked at 0.53 for as long as the
-session runs. The stealth rung breaks that trend: 0/12 ever-SUSPECT and 0/12
-ever-BOT however long it runs, confidence flat at 0.07. The wider 40-seed
-sweep reads the same: 0/40 ever touches SUSPECT, 0/40 ever reaches BOT.
+More session does not help the detector against the top two rungs. The evasive
+bot is caught and stays caught: every seed escalates, a median 63 s to the first
+BOT touch, confidence parked at 0.54 for as long as it runs. The stealth rung
+never touches either tier at any length, confidence flat at 0.05. The route
+planner adds no new exposure between three and ten minutes: the same two seeds
+touch BOT, and confidence falls to 0.08 as the longer session dilutes them.
 
 ## Why the economy wins
 
